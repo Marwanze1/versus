@@ -47,7 +47,8 @@ async function spProxyHtml(url, valid = () => true) {
       const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 12000);
       try {
         const [addr, opts] = mk(url);
-        const r = await fetch(addr, { ...(opts || {}), signal: ctl.signal }), t = await r.text();
+        // cache: 'no-store' : une réponse mise en cache pour un autre site serait refusée par CORS
+        const r = await fetch(addr, { ...(opts || {}), cache: 'no-store', signal: ctl.signal }), t = await r.text();
         if (r.ok && SP_NEXT_RE.test(t) && !t.includes('not available in your country') && valid(t)) return t;
       } catch { /* on essaie le relais suivant */ } finally { clearTimeout(to); }
     }
