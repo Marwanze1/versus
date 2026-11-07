@@ -263,6 +263,9 @@ code{background:#101014;border:1px solid var(--line);border-radius:6px;padding:2
 .bt-timer{font-size:48px;font-weight:900;text-align:center;color:var(--orange2)}
 .bt-hint{min-height:64px;text-align:center;font-size:26px;font-weight:800;font-family:ui-monospace,Consolas,monospace;letter-spacing:.18em;white-space:pre-wrap;word-break:break-word}
 .bt-hint small{display:block;font-size:11px;letter-spacing:3px;color:var(--muted);font-family:Inter,system-ui,sans-serif;margin-bottom:2px}
+.bt-hint .hfound{color:#5dff9a;letter-spacing:.04em;text-shadow:0 0 18px rgba(93,255,154,.45);animation:pop .35s ease-out}
+.bt-hint .hfound em{display:block;font-style:normal;font-size:12px;letter-spacing:0;color:var(--muted);font-family:Inter,system-ui,sans-serif;font-weight:600;text-shadow:none}
+@keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
 .bt-hint .dim{color:#555;font-size:15px;letter-spacing:0;font-family:Inter,system-ui,sans-serif;font-weight:500}
 .vinyl{width:150px;height:150px;border-radius:50%;
   background:radial-gradient(circle,var(--orange) 0 14%,#111 15% 22%,transparent 23%),

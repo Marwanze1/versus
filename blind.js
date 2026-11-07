@@ -175,6 +175,13 @@ function btPublicState() {
     remaining: btRemaining(), hint: G.hint, loadMsg: G.loadMsg, hasHints: G.s.hints,
     players: [...G.players.values()].map(p => ({ pid: p.pid, name: p.name, score: p.score, connected: p.connected, t: p.tFound, a: p.aFound, g: p.gained })),
   };
+  // Dès que quelqu'un a trouvé le titre / l'artiste, il s'écrit en entier pour tout le monde
+  if (G.phase === 'playing' && G.cur && G.firstDone) {
+    const f = {};
+    if (G.firstDone.t) f.t = { txt: G.cur.cleanTitle, by: G.finder.t };
+    if (G.firstDone.a) f.a = { txt: String(G.cur.sub), by: G.finder.a };
+    if (f.t || f.a) s.found = f;
+  }
   if (G.phase === 'reveal' && G.cur) s.reveal = publicTrack(G.cur);
   if (G.phase === 'end') s.tracks = G.played.map(publicTrack);
   return s;
@@ -219,7 +226,7 @@ function btNextRound() {
   const G = bt.G; clearTimeout(G.revT); clearInterval(G.tick);
   G.round++;
   if (G.round > G.total || !G.queue.length) return btEndGame();
-  G.cur = G.queue.shift(); G.firstDone = {}; G.hint = null; G.hintLvl = 0;
+  G.cur = G.queue.shift(); G.firstDone = {}; G.finder = {}; G.hint = null; G.hintLvl = 0;
   G.players.forEach(p => { p.tFound = p.aFound = false; p.gained = 0; });
   G.phase = 'countdown'; G.endsAt = Date.now() + 3000;
   btAudio.pause(); btAudio.src = G.cur.preview; btAudio.load();
@@ -297,7 +304,7 @@ function btAward(G, p, part) {
   const base = part === 't' ? 100 : (G.s.mode === 'both' ? 50 : 100);
   const frac = Math.max(0, (G.endsAt - Date.now()) / (G.s.clip * 1000));
   let pts = base + Math.round(base * 0.5 * frac);
-  if (!G.firstDone[part]) { G.firstDone[part] = true; pts += 25; }
+  if (!G.firstDone[part]) { G.firstDone[part] = true; G.finder[part] = p.name; pts += 25; }
   p.score += pts; p.gained += pts; return pts;
 }
 function btGuess(pid, text) {
@@ -338,8 +345,13 @@ function foundHTML(players, mode) {
   return players.map(p => `<span class="fchip ${(p.t || p.a) ? 'ok' : ''} ${p.connected ? '' : 'off'}">${esc(p.name)}
     ${mode !== 'artist' ? `<i class="${p.t ? 'on' : ''}">🎵</i>` : ''}${mode !== 'title' ? `<i class="${p.a ? 'on' : ''}">🎤</i>` : ''}</span>`).join('');
 }
-const hintHTML = (s) => s.hint ? `${s.hint.t ? `<div><small>TITRE</small>${esc(s.hint.t)}</div>` : ''}${s.hint.a ? `<div><small>ARTISTE</small>${esc(s.hint.a)}</div>` : ''}`
-  : (s.hasHints ? '<div class="dim">Un indice apparaîtra…</div>' : '');
+function hintHTML(s) {
+  const f = s.found || {}, h = s.hint || {};
+  const line = (k, label) => f[k]
+    ? `<div class="hfound"><small>${label}</small>${esc(f[k].txt)}<em>✅ trouvé par ${esc(f[k].by || '?')}</em></div>`
+    : h[k] ? `<div><small>${label}</small>${esc(h[k])}</div>` : '';
+  return line('t', 'TITRE') + line('a', 'ARTISTE') || (s.hasHints ? '<div class="dim">Un indice apparaîtra…</div>' : '');
+}
 const modeLabel = m => m === 'both' ? 'titre + artiste' : m === 'title' ? 'le titre' : 'l’artiste';
 function revealHTML(r) {
   return `<div class="bt-reveal">${cover(r)}<div class="t">${esc(r.title)}</div><div class="s">${esc(r.sub)}</div>
