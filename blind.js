@@ -7,7 +7,7 @@
    ===================================================================== */
 
 const BT_KEY = 'versus.blind';
-const BT_DEFAULTS = { rounds: 10, clip: 20, mode: 'both', hints: true, randomStart: false, autoNext: true, hostPlays: true };
+const BT_DEFAULTS = { rounds: 10, clip: 20, mode: 'both', hints: true, randomStart: false, autoNext: true, hostPlays: true, hostSound: true };
 let btSaved = {}; try { btSaved = JSON.parse(localStorage.getItem(BT_KEY)) || {}; } catch { }
 const bt = {
   role: null,        // null | 'host' | 'player'
@@ -21,7 +21,12 @@ const btSaveSettings = () => localStorage.setItem(BT_KEY, JSON.stringify(bt.sett
 const btAudio = new Audio();
 btAudio.preload = 'auto';
 btAudio.volume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('versus.vol') ?? '0.8')));
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/* Lecteur des joueurs : chacun entend l'extrait sur son propre appareil (volume = boutons du téléphone ou curseur). */
+const btPAudio = new Audio();
+btPAudio.preload = 'auto';
+btPAudio.volume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('versus.pvol') ?? '1')));
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const CODE_CHARS ='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const genCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 const btPid = () => { let p = localStorage.getItem('versus.pid'); if (!p) { p = uid() + uid(); localStorage.setItem('versus.pid', p); } return p; };
 const btLink = code => location.origin + location.pathname.replace(/index\.html$/, '') + '?join=' + code;
@@ -182,6 +187,9 @@ function btPublicState() {
     if (G.firstDone.a) f.a = { txt: String(G.cur.sub), by: G.finder.a };
     if (f.t || f.a) s.found = f;
   }
+  // l'extrait est envoyé aux joueurs pour qu'ils l'entendent sur leur appareil
+  if ((G.phase === 'countdown' || G.phase === 'playing') && G.cur) s.audio = G.cur.preview;
+  if (G.phase === 'playing') s.pos = btAudio.currentTime || 0;
   if (G.phase === 'reveal' && G.cur) s.reveal = publicTrack(G.cur);
   if (G.phase === 'end') s.tracks = G.played.map(publicTrack);
   return s;
@@ -242,6 +250,7 @@ function btStartPlaying() {
   const G = bt.G; if (!G || G.phase !== 'countdown') return;
   clearInterval(G.tick);
   G.phase = 'playing'; G.endsAt = Date.now() + G.s.clip * 1000;
+  btAudio.muted = !!G.online && !G.s.hostSound; // l'hôte peut couper le son de son écran : les joueurs l'ont sur leur téléphone
   const go = () => {
     if (G.s.randomStart) btAudio.currentTime = Math.random() * Math.max(0, (btAudio.duration || 30) - G.s.clip);
     btAudio.play().catch(() => { G.needSound = true; btPatchHost(); });
@@ -398,7 +407,7 @@ function hostView() {
         <label>Ton pseudo <input type="text" id="btHostName" maxlength="20" value="${esc(bt.name)}" placeholder="Hôte"></label>
       </div>
       <div class="row" style="margin-top:12px;gap:18px">
-        ${chk('hints', '💡 Indices (lettres)')}${chk('randomStart', '🎲 Début aléatoire')}${chk('autoNext', '⏩ Manche suivante auto')}${G.online ? chk('hostPlays', '🙋 Je joue aussi') : ''}
+        ${chk('hints', '💡 Indices (lettres)')}${chk('randomStart', '🎲 Début aléatoire')}${chk('autoNext', '⏩ Manche suivante auto')}${G.online ? chk('hostPlays', '🙋 Je joue aussi') : ''}${G.online ? chk('hostSound', '🔈 Son sur cet écran') : ''}
       </div>
     </div>
     <div class="panel"><h2>Joueurs</h2><div id="btPlayers">${playersChips()}</div></div>
@@ -444,6 +453,8 @@ function btJoin(code, name) {
   code = String(code).trim().toUpperCase(); name = String(name).trim().slice(0, 20);
   if (!/^[A-Z0-9]{5}$/.test(code)) return toast('Le code fait 5 caractères.');
   if (!name) return toast('Choisis un pseudo.');
+  // on « débloque » le son pendant ce clic (obligatoire sur téléphone), pour que l'extrait puisse démarrer tout seul ensuite
+  try { btPAudio.src = SILENT_WAV; btPAudio.play().catch(() => { }); } catch { }
   bt.name = name; localStorage.setItem('versus.name', name); bt.joinCode = code;
   bt.role = 'player';
   const P = bt.P = { code, name, pid: btPid(), peer: null, conn: null, state: null, status: 'connecting', error: '', fb: null, key: '', endsAt: 0, tries: 0, left: false };
@@ -465,8 +476,9 @@ function btPlayerConnect() {
   conn.on('open', () => { clearTimeout(timeout); P.status = 'open'; P.tries = 0; conn.send({ t: 'join', pid: P.pid, name: P.name }); });
   conn.on('data', m => {
     if (m.t === 'state') {
-      P.state = m.s; P.endsAt = Date.now() + (m.s.remaining || 0);
+      P.state = m.s; P.stateAt = Date.now(); P.endsAt = Date.now() + (m.s.remaining || 0);
       const key = m.s.phase + ':' + m.s.round;
+      btPlayerAudio();
       if (key !== P.key) { P.key = key; P.fb = null; render(); } else btPatchPlayer();
     } else if (m.t === 'fb') { P.fb = m; btShowFb(m); }
   });
@@ -477,7 +489,23 @@ function btPlayerConnect() {
     if (P.tries++ < 15) setTimeout(() => { if (!P.left && P.status === 'closed') { P.status = 'connecting'; btPlayerConnect(); } }, 2000);
   });
 }
+/* Le joueur charge l'extrait pendant le compte à rebours et le lance au début de la manche (en rattrapant le retard). */
+function btPlayerAudio() {
+  const P = bt.P, s = P && P.state, A = btPAudio; if (!s) return;
+  if (s.audio && (s.phase === 'countdown' || s.phase === 'playing')) {
+    if (P.audioUrl !== s.audio) { P.audioUrl = s.audio; P.playedRound = null; A.pause(); A.src = s.audio; A.load(); }
+    if (s.phase === 'playing' && P.playedRound !== s.round) {
+      P.playedRound = s.round;
+      const go = () => {
+        try { A.currentTime = (s.pos || 0) + (Date.now() - P.stateAt) / 1000; } catch { }
+        A.play().then(() => { if (P.needSound) { P.needSound = false; render(); } }, () => { P.needSound = true; render(); });
+      };
+      if (A.readyState >= 1) go(); else A.addEventListener('loadedmetadata', go, { once: true });
+    }
+  } else { A.pause(); P.audioUrl = ''; }
+}
 function btLeave() {
+  btPAudio.pause();
   const P = bt.P; if (P) { P.left = true; try { P.conn?.close(); P.peer?.destroy(); } catch { } }
   bt.P = null; bt.role = null; bt.joinCode = '';
   if (location.search) history.replaceState(null, '', location.pathname);
@@ -503,12 +531,14 @@ function playerView() {
   if (s.phase === 'lobby') body = `<div class="bt-center"><h2>✅ Tu es dans le salon !</h2><p class="hint">En attendant que l’hôte lance la partie…<br>Réglages : ${modeLabel(s.mode)} · extraits de ${s.clip} s</p>
     <ul class="bt-plist">${s.players.map(p => `<li class="${p.connected ? '' : 'off'}"><span class="av" style="--h:${hash(p.name) % 360}">${esc(initials(p.name))}</span>${esc(p.name)}${p.pid === P.pid ? ' (toi)' : ''}</li>`).join('')}</ul></div>`;
   else if (s.phase === 'loading') body = `<div class="bt-center"><div class="vinyl spinning"></div><h2>Préparation…</h2></div>`;
-  else if (s.phase === 'countdown') body = `${head}<div class="bt-center"><div class="bt-big" id="pCount">3</div><p class="hint">Prépare-toi, écoute bien l’écran de l’hôte !</p></div>`;
+  else if (s.phase === 'countdown') body = `${head}<div class="bt-center"><div class="bt-big" id="pCount">3</div><p class="hint">Prépare-toi, la musique va démarrer sur ton appareil !</p></div>`;
   else if (s.phase === 'playing') {
     const done = (s.mode === 'artist' || me.t) && (s.mode === 'title' || me.a);
     body = `${head}<div class="progress"><i id="pBar" style="width:0%"></i></div>
       <div class="bt-timer" id="pTimer">${s.clip}</div>
       <div class="bt-hint" id="pHint">${hintHTML(s)}</div>
+      ${P.needSound ? '<div style="text-align:center;margin:10px 0"><button class="btn" data-action="bt-psound">🔊 Clique ici pour activer le son</button></div>' : ''}
+      <label class="vol" style="justify-content:center;margin:8px 0">🔊 <input type="range" min="0" max="1" step="0.05" value="${btPAudio.volume}" data-bt-pvol></label>
       <div class="bt-status" id="pStatus">${statusHTML(s, me)}</div>
       <form class="bt-form" onsubmit="event.preventDefault();btPlayerSubmit()">
         <input type="text" id="btAnswer" placeholder="${done ? 'Tout trouvé ! 🎉' : 'Ta réponse…'}" autocomplete="off" autocapitalize="off" ${done ? 'disabled' : ''}>
@@ -560,7 +590,13 @@ function blindAction(action, a) {
     }
     case 'bt-again': btReset(); return true;
     case 'bt-close': btClose(); return true;
-    case 'bt-sound': btAudio.play().then(() => { bt.G.needSound = false; btPatchHost(); }).catch(() => { }); return true;
+    case 'bt-psound': {
+      const P = bt.P, s = P && P.state; if (!s) return true;
+      try { btPAudio.currentTime = (s.pos || 0) + (Date.now() - P.stateAt) / 1000; } catch { }
+      btPAudio.play().then(() => { P.needSound = false; render(); }, () => { });
+      return true;
+    }
+    case 'bt-sound':btAudio.play().then(() => { bt.G.needSound = false; btPatchHost(); }).catch(() => { }); return true;
     case 'bt-copy': {
       const link = btLink(bt.G.code);
       (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => toast('Lien copié !'), () => ask({ title: 'Copie ce lien', input: true, value: link, ok: 'OK' }));
@@ -586,6 +622,9 @@ document.addEventListener('input', e => {
   }
   if (e.target.dataset && e.target.dataset.btVol !== undefined) {
     btAudio.volume = +e.target.value; localStorage.setItem('versus.vol', e.target.value);
+  }
+  if (e.target.dataset && e.target.dataset.btPvol !== undefined) {
+    btPAudio.volume = +e.target.value; localStorage.setItem('versus.pvol', e.target.value);
   }
   if (e.target.id === 'btJoinCode') bt.joinCode = e.target.value.toUpperCase();
 });
