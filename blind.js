@@ -190,13 +190,6 @@ function btPublicState() {
     remaining: btRemaining(), hint: G.hint, loadMsg: G.loadMsg, hasHints: G.s.hints,
     players: [...G.players.values()].map(p => ({ pid: p.pid, name: p.name, score: p.score, connected: p.connected, t: p.tFound, a: p.aFound, g: p.gained })),
   };
-  // Dès que quelqu'un a trouvé le titre / l'artiste, il s'écrit en entier pour tout le monde
-  if (G.phase === 'playing' && G.cur && G.firstDone) {
-    const f = {};
-    if (G.firstDone.t) f.t = { txt: G.cur.cleanTitle, by: G.finder.t };
-    if (G.firstDone.a) f.a = { txt: String(G.cur.sub), by: G.finder.a };
-    if (f.t || f.a) s.found = f;
-  }
   // l'extrait est envoyé aux joueurs pour qu'ils l'entendent sur leur appareil
   if ((G.phase === 'countdown' || G.phase === 'playing') && G.cur) s.audio = G.cur.preview;
   if (G.phase === 'playing') s.pos = btAudio.currentTime || 0;
@@ -332,8 +325,8 @@ function btGuess(pid, text) {
   const now = Date.now(); if (now - p.last < 350) return null; p.last = now;
   const g = norm(String(text).slice(0, 120)); if (!g) return null;
   const tr = G.cur, fb = { t: 'fb', title: null, artist: null, pts: 0 };
-  if (G.s.mode !== 'artist' && !p.tFound && tr.tT.some(T => matchTarget(g, T))) { p.tFound = true; fb.title = true; fb.pts += btAward(G, p, 't'); }
-  if (G.s.mode !== 'title' && !p.aFound && tr.aT.some(T => matchTarget(g, T))) { p.aFound = true; fb.artist = true; fb.pts += btAward(G, p, 'a'); }
+  if (G.s.mode !== 'artist' && !p.tFound && tr.tT.some(T => matchTarget(g, T))) { p.tFound = true; fb.title = true; fb.titleTxt = tr.cleanTitle; fb.pts += btAward(G, p, 't'); }
+  if (G.s.mode !== 'title' && !p.aFound && tr.aT.some(T => matchTarget(g, T))) { p.aFound = true; fb.artist = true; fb.artistTxt = String(tr.sub); fb.pts += btAward(G, p, 'a'); }
   fb.miss = !(fb.title || fb.artist);
   if (!fb.miss) { btUpdateHost(); btCheckAllDone(); }
   return fb;
@@ -364,10 +357,18 @@ function foundHTML(players, mode) {
   return players.map(p => `<span class="fchip ${(p.t || p.a) ? 'ok' : ''} ${p.connected ? '' : 'off'}">${esc(p.name)}
     ${mode !== 'artist' ? `<i class="${p.t ? 'on' : ''}">🎵</i>` : ''}${mode !== 'title' ? `<i class="${p.a ? 'on' : ''}">🎤</i>` : ''}</span>`).join('');
 }
+/* Ce qu'un joueur a trouvé n'est visible que par lui : « found » = { t, a } propre à celui qui regarde l'écran. */
+function btHostFound() {
+  const G = bt.G, p = G && G.players.get('host'); if (!p || G.phase !== 'playing' || !G.cur) return null;
+  const f = {};
+  if (p.tFound) f.t = { txt: G.cur.cleanTitle };
+  if (p.aFound) f.a = { txt: String(G.cur.sub) };
+  return f;
+}
 function hintHTML(s) {
   const f = s.found || {}, h = s.hint || {};
   const line = (k, label) => f[k]
-    ? `<div class="hfound"><small>${label}</small>${esc(f[k].txt)}<em>✅ trouvé par ${esc(f[k].by || '?')}</em></div>`
+    ? `<div class="hfound"><small>${label}</small>${esc(f[k].txt)}<em>✅ trouvé !</em></div>`
     : h[k] ? `<div><small>${label}</small>${esc(h[k])}</div>` : '';
   return line('t', 'TITRE') + line('a', 'ARTISTE') || (s.hasHints ? '<div class="dim">Un indice apparaîtra…</div>' : '');
 }
@@ -430,7 +431,7 @@ function hostView() {
     const fb = G.players.has('host');
     return `${topbar}${header}
     <div class="progress"><i id="btBar" style="width:0%"></i></div>
-    <div class="bt-stage"><div class="vinyl spinning"></div><div class="bt-timer" id="btTimer">${G.s.clip}</div><div class="bt-hint" id="btHint">${hintHTML(st)}</div></div>
+    <div class="bt-stage"><div class="vinyl spinning"></div><div class="bt-timer" id="btTimer">${G.s.clip}</div><div class="bt-hint" id="btHint">${hintHTML({ ...st, found: btHostFound() })}</div></div>
     <div id="btSound">${G.needSound ? '<button class="btn" data-action="bt-sound">🔊 Clique ici pour activer le son</button>' : ''}</div>
     ${fb ? `<form class="bt-form" onsubmit="event.preventDefault();btHostSubmit()"><input type="text" id="btAnswer" placeholder="Ta réponse (${modeLabel(s.mode)})…" autocomplete="off" autocapitalize="off"><button class="btn" type="submit">Valider</button></form><div id="btFb" class="bt-fb"></div>` : ''}
     <div class="bt-found" id="btFound">${foundHTML(st.players, s.mode)}</div>
@@ -449,7 +450,7 @@ function btPatchHost() {
   const st = btPublicState();
   if (G.phase === 'lobby' && $('#btPlayers')) $('#btPlayers').innerHTML = playersChips();
   if ($('#btFound')) $('#btFound').innerHTML = foundHTML(st.players, G.s.mode);
-  if ($('#btHint')) $('#btHint').innerHTML = hintHTML(st);
+  if ($('#btHint')) $('#btHint').innerHTML = hintHTML({ ...st, found: btHostFound() });
   if ($('#btSound')) $('#btSound').innerHTML = G.needSound ? '<button class="btn" data-action="bt-sound">🔊 Clique ici pour activer le son</button>' : '';
 }
 function btPatchTimer(rem) {
@@ -489,8 +490,13 @@ function btPlayerConnect() {
       P.state = m.s; P.stateAt = Date.now(); P.endsAt = Date.now() + (m.s.remaining || 0);
       const key = m.s.phase + ':' + m.s.round;
       btPlayerAudio();
-      if (key !== P.key) { P.key = key; P.fb = null; render(); } else btPatchPlayer();
-    } else if (m.t === 'fb') { P.fb = m; btShowFb(m); }
+      if (key !== P.key) { P.key = key; P.fb = null; P.found = null; render(); } else btPatchPlayer();
+    } else if (m.t === 'fb') {
+      P.fb = m; btShowFb(m);
+      if (m.titleTxt) P.found = { ...P.found, t: { txt: m.titleTxt } };
+      if (m.artistTxt) P.found = { ...P.found, a: { txt: m.artistTxt } };
+      btPatchPlayer();
+    }
   });
   conn.on('close', () => {
     clearTimeout(timeout);
@@ -548,7 +554,7 @@ function playerView() {
     const done = (s.mode === 'artist' || me.t) && (s.mode === 'title' || me.a);
     body = `${head}<div class="progress"><i id="pBar" style="width:0%"></i></div>
       <div class="bt-timer" id="pTimer">${s.clip}</div>
-      <div class="bt-hint" id="pHint">${hintHTML(s)}</div>
+      <div class="bt-hint" id="pHint">${hintHTML({ ...s, found: P.found })}</div>
       ${P.needSound ? '<div style="text-align:center;margin:10px 0"><button class="btn" data-action="bt-psound">🔊 Clique ici pour activer le son</button></div>' : ''}
       ${!s.audio ? '<p class="hint err" style="text-align:center">Pas de musique reçue : l’hôte doit recharger la page (Ctrl+F5) et recréer le salon.</p>' : ''}
       ${P.audioErr ? '<p class="hint err" style="text-align:center">Cet extrait n’a pas pu être chargé sur ton appareil.</p>' : ''}
@@ -570,7 +576,7 @@ function btPatchPlayer() {
   const P = bt.P, s = P && P.state; if (!s) return;
   const me = s.players.find(p => p.pid === P.pid) || { t: false, a: false };
   if ($('#pFound')) $('#pFound').innerHTML = foundHTML(s.players, s.mode);
-  if ($('#pHint')) $('#pHint').innerHTML = hintHTML(s);
+  if ($('#pHint')) $('#pHint').innerHTML = hintHTML({ ...s, found: P.found });
   if ($('#pStatus')) $('#pStatus').innerHTML = statusHTML(s, me);
   const done = s.phase === 'playing' && (s.mode === 'artist' || me.t) && (s.mode === 'title' || me.a);
   const inp = $('#btAnswer'); if (inp && done) { inp.disabled = true; inp.placeholder = 'Tout trouvé ! 🎉'; $('.bt-form button').disabled = true; }
