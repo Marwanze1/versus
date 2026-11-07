@@ -25,7 +25,17 @@ btAudio.volume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('versus
 const btPAudio = new Audio();
 btPAudio.preload = 'auto';
 btPAudio.volume = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('versus.pvol') ?? '1')));
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+// 0,5 s de silence (WAV généré ici) : sert à « débloquer » le son du téléphone pendant un clic
+const SILENT_WAV = (() => {
+  const n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, s) => [...s].forEach((c, i) => b[o + i] = c.charCodeAt(0));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+  b.fill(128, 44); return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+})();
+function btUnlockSound() {
+  try { btPAudio.src = SILENT_WAV; btPAudio.play().then(() => { const P = bt.P; if (P && !P.unlocked) { P.unlocked = true; if (P.state && P.state.phase === 'lobby') render(); } }, () => { }); } catch { }
+}
+btPAudio.addEventListener('error', () => { const P = bt.P; if (P && P.audioUrl) { P.audioErr = true; render(); } });
 const CODE_CHARS ='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const genCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 const btPid = () => { let p = localStorage.getItem('versus.pid'); if (!p) { p = uid() + uid(); localStorage.setItem('versus.pid', p); } return p; };
@@ -454,7 +464,7 @@ function btJoin(code, name) {
   if (!/^[A-Z0-9]{5}$/.test(code)) return toast('Le code fait 5 caractères.');
   if (!name) return toast('Choisis un pseudo.');
   // on « débloque » le son pendant ce clic (obligatoire sur téléphone), pour que l'extrait puisse démarrer tout seul ensuite
-  try { btPAudio.src = SILENT_WAV; btPAudio.play().catch(() => { }); } catch { }
+  btUnlockSound();
   bt.name = name; localStorage.setItem('versus.name', name); bt.joinCode = code;
   bt.role = 'player';
   const P = bt.P = { code, name, pid: btPid(), peer: null, conn: null, state: null, status: 'connecting', error: '', fb: null, key: '', endsAt: 0, tries: 0, left: false };
@@ -493,7 +503,7 @@ function btPlayerConnect() {
 function btPlayerAudio() {
   const P = bt.P, s = P && P.state, A = btPAudio; if (!s) return;
   if (s.audio && (s.phase === 'countdown' || s.phase === 'playing')) {
-    if (P.audioUrl !== s.audio) { P.audioUrl = s.audio; P.playedRound = null; A.pause(); A.src = s.audio; A.load(); }
+    if (P.audioUrl !== s.audio) { P.audioUrl = s.audio; P.audioErr = false; P.playedRound = null; A.pause(); A.src = s.audio; A.load(); }
     if (s.phase === 'playing' && P.playedRound !== s.round) {
       P.playedRound = s.round;
       const go = () => {
@@ -529,6 +539,8 @@ function playerView() {
   const head = `<div class="round-head" style="padding:12px"><h1 style="font-size:24px">Manche ${s.round} / ${s.total}</h1><p style="margin-top:6px;font-size:15px">Trouve ${modeLabel(s.mode)}</p></div>`;
   let body = '';
   if (s.phase === 'lobby') body = `<div class="bt-center"><h2>✅ Tu es dans le salon !</h2><p class="hint">En attendant que l’hôte lance la partie…<br>Réglages : ${modeLabel(s.mode)} · extraits de ${s.clip} s</p>
+    <p class="hint">🔊 La musique sera jouée sur ton appareil : monte le volume !</p>
+    ${P.unlocked ? '' : '<button class="btn" data-action="bt-unlock">🔊 Appuie ici pour activer le son</button>'}
     <ul class="bt-plist">${s.players.map(p => `<li class="${p.connected ? '' : 'off'}"><span class="av" style="--h:${hash(p.name) % 360}">${esc(initials(p.name))}</span>${esc(p.name)}${p.pid === P.pid ? ' (toi)' : ''}</li>`).join('')}</ul></div>`;
   else if (s.phase === 'loading') body = `<div class="bt-center"><div class="vinyl spinning"></div><h2>Préparation…</h2></div>`;
   else if (s.phase === 'countdown') body = `${head}<div class="bt-center"><div class="bt-big" id="pCount">3</div><p class="hint">Prépare-toi, la musique va démarrer sur ton appareil !</p></div>`;
@@ -538,6 +550,8 @@ function playerView() {
       <div class="bt-timer" id="pTimer">${s.clip}</div>
       <div class="bt-hint" id="pHint">${hintHTML(s)}</div>
       ${P.needSound ? '<div style="text-align:center;margin:10px 0"><button class="btn" data-action="bt-psound">🔊 Clique ici pour activer le son</button></div>' : ''}
+      ${!s.audio ? '<p class="hint err" style="text-align:center">Pas de musique reçue : l’hôte doit recharger la page (Ctrl+F5) et recréer le salon.</p>' : ''}
+      ${P.audioErr ? '<p class="hint err" style="text-align:center">Cet extrait n’a pas pu être chargé sur ton appareil.</p>' : ''}
       <label class="vol" style="justify-content:center;margin:8px 0">🔊 <input type="range" min="0" max="1" step="0.05" value="${btPAudio.volume}" data-bt-pvol></label>
       <div class="bt-status" id="pStatus">${statusHTML(s, me)}</div>
       <form class="bt-form" onsubmit="event.preventDefault();btPlayerSubmit()">
@@ -590,6 +604,7 @@ function blindAction(action, a) {
     }
     case 'bt-again': btReset(); return true;
     case 'bt-close': btClose(); return true;
+    case 'bt-unlock': btUnlockSound(); return true;
     case 'bt-psound': {
       const P = bt.P, s = P && P.state; if (!s) return true;
       try { btPAudio.currentTime = (s.pos || 0) + (Date.now() - P.stateAt) / 1000; } catch { }
