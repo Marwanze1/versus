@@ -30,9 +30,11 @@ const spPrevSave = () => {
       de Spotify via des relais CORS publics (moins fiables : ils peuvent être en panne). */
 const SP_LINK_RE = /(?:open\.spotify\.com\/(?:intl-[a-z]+\/)?|spotify:)(track|album|playlist|artist)[\/:]([A-Za-z0-9]{22})/;
 const SP_NEXT_RE = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/;
+// Chaque relais renvoie [adresse, options fetch]. Essayés dans l'ordre ; les pages « indisponible dans votre pays » sont rejetées.
 const SP_PROXIES = [
-  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-  u => 'https://allorigins.hexlet.app/raw?url=' + encodeURIComponent(u),
+  u => ['https://r.jina.ai/' + u, { headers: { 'X-Return-Format': 'html' } }],
+  u => ['https://api.allorigins.win/raw?url=' + encodeURIComponent(u)],
+  u => ['https://allorigins.hexlet.app/raw?url=' + encodeURIComponent(u)],
 ];
 let spServer = null; // null = pas encore testé, true/false = le serveur du site répond (ou non)
 
@@ -44,8 +46,9 @@ async function spProxyHtml(url, valid = () => true) {
     for (const mk of SP_PROXIES) {
       const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 12000);
       try {
-        const r = await fetch(mk(url), { signal: ctl.signal }), t = await r.text();
-        if (r.ok && SP_NEXT_RE.test(t) && valid(t)) return t;
+        const [addr, opts] = mk(url);
+        const r = await fetch(addr, { ...(opts || {}), signal: ctl.signal }), t = await r.text();
+        if (r.ok && SP_NEXT_RE.test(t) && !t.includes('not available in your country') && valid(t)) return t;
       } catch { /* on essaie le relais suivant */ } finally { clearTimeout(to); }
     }
   }
