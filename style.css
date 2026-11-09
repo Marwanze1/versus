@@ -480,3 +480,45 @@ body.bt-skin #toast button{color:#117a37}
   body.bt-skin .bt-code{font-size:46px}
   body.bt-skin .bt-form .btn{padding:0 20px}
 }
+/* ---------- Thème Spotify : le reste du site (éléments, tier list, bracket, fenêtres) ---------- */
+body.bt-skin .item-card{background:#181818;border:0;border-radius:10px;padding:12px}
+body.bt-skin .item-card:hover{background:#282828;transform:none}
+body.bt-skin .cover{border-radius:8px}
+body.bt-skin .icon-btn{background:rgba(0,0,0,.72);border:0;color:#fff}
+body.bt-skin .icon-btn:hover{background:#fff;color:#000}
+body.bt-skin .modal{background:#282828;border:0;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.75)}
+body.bt-skin .btn.dangerbtn{background:#f15e6c;color:#000;box-shadow:none}
+body.bt-skin .sp-list{background:#121212;border:0}
+body.bt-skin .sp-row{border-bottom:1px solid #181818}
+body.bt-skin .sp-row:hover{background:#2a2a2a}
+body.bt-skin .panel.spotify{border:0}
+body.bt-skin code{background:#2a2a2a;border:0}
+body.bt-skin .upload .cover{border:1px dashed #535353}
+/* tier list */
+body.bt-skin .tier-wrap{border:0;background:#121212;border-radius:12px}
+body.bt-skin .tier-row{border-bottom:2px solid #000}
+body.bt-skin .dropzone.over{background:rgba(30,215,96,.14);outline-color:#1ed760}
+body.bt-skin .chip.selected{border-color:#1ed760;box-shadow:none}
+body.bt-skin .pool{border:0;background:#181818}
+body.bt-skin .pool h3{border-bottom:1px solid #2a2a2a}
+/* bracket */
+body.bt-skin .size-pick button{background:#2a2a2a;border:0;border-radius:12px;color:#fff}
+body.bt-skin .size-pick button:hover{background:#3a3a3a}
+body.bt-skin .size-pick button.on{background:#1ed760;color:#000;box-shadow:none}
+body.bt-skin .size-pick button.on small{color:rgba(0,0,0,.65)}
+body.bt-skin .round-head{background:transparent;border:0;box-shadow:none;padding:6px 10px 2px}
+body.bt-skin .round-head h1{color:#fff;text-shadow:none;font-size:32px;letter-spacing:-.5px}
+body.bt-skin .round-head p{color:var(--muted);font-size:16px;margin-top:4px}
+body.bt-skin .duel-card{background:#181818;border:0;border-radius:14px;box-shadow:none}
+body.bt-skin .duel-card:hover{background:#282828;box-shadow:0 14px 34px rgba(0,0,0,.55);transform:translateY(-4px)}
+body.bt-skin .duel-card .cover{border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
+body.bt-skin .duel-card .play{background:#1ed760;color:#000;border:0;font-weight:700;padding:7px 16px}
+body.bt-skin .duel-card .play:hover{background:#3be477;color:#000}
+body.bt-skin .duel-card.win{background:#1c2a21;box-shadow:0 0 0 3px #1ed760;transform:scale(1.04)}
+body.bt-skin .vs{background:#1ed760;color:#000;border:0;box-shadow:0 8px 24px rgba(30,215,96,.3)}
+body.bt-skin .champion .cover{border:0;border-radius:10px;box-shadow:0 16px 50px rgba(0,0,0,.65)}
+body.bt-skin .champion h1{color:#fff;text-shadow:none}
+body.bt-skin .tmatch{background:#181818;border:0}
+body.bt-skin .tmatch div + div{border-top:1px solid #2a2a2a}
+body.bt-skin .tmatch.cur{box-shadow:0 0 0 2px #1ed760}
+body.bt-skin .tmatch .w{background:rgba(30,215,96,.18)}

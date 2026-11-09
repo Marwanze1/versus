@@ -53,7 +53,6 @@ function renderHeader() {
 }
 function render() {
   document.body.classList.toggle('player-mode', bt.role === 'player');
-  document.body.classList.toggle('bt-skin', bt.role === 'player' || ui.tab === 'blind'); // thème « Spotify » du blind test
   if (bt.role === 'player') { $('#app').innerHTML = playerView(); return; }
   renderHeader();
   const app = $('#app');
@@ -203,15 +202,15 @@ async function exportTier() {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = heights.reduce((a, b) => a + b, 0) + 56;
   const g = cv.getContext('2d');
-  g.fillStyle = '#0a0a0d'; g.fillRect(0, 0, cv.width, cv.height);
-  g.fillStyle = '#ff6a2b'; g.font = '900 26px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#121212'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#1ed760'; g.font = '900 26px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
   g.fillText(c.name.toUpperCase(), 14, 28);
   let y = 56;
   rows.forEach((r, ri) => {
     g.fillStyle = r.t.color; g.fillRect(0, y, LW, heights[ri]);
     g.fillStyle = '#111'; g.font = '900 34px sans-serif'; g.textAlign = 'center';
     g.fillText(r.t.name, LW / 2, y + heights[ri] / 2, LW - 16);
-    g.fillStyle = '#17171c'; g.fillRect(LW, y, W - LW, heights[ri]);
+    g.fillStyle = '#181818'; g.fillRect(LW, y, W - LW, heights[ri]);
     r.items.forEach((it, k) => {
       const x = LW + 6 + (k % per) * S, yy = y + Math.floor(k / per) * S + 2, s = S - 4;
       if (imgs[it.id]) g.drawImage(imgs[it.id], x, yy, s, s);
@@ -227,7 +226,7 @@ async function exportTier() {
       g.fillText(it.title, x + s / 2, yy + s - 9, s - 6);
     });
     y += heights[ri];
-    g.fillStyle = '#0a0a0d'; g.fillRect(0, y - 2, W, 2);
+    g.fillStyle = '#121212'; g.fillRect(0, y - 2, W, 2);
   });
   try {
     const a = document.createElement('a');
