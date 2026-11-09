@@ -7,7 +7,7 @@
    ===================================================================== */
 
 const BT_KEY = 'versus.blind';
-const BT_DEFAULTS = { rounds: 10, clip: 20, mode: 'both', hints: true, randomStart: false, autoNext: true, hostPlays: true, hostSound: true };
+const BT_DEFAULTS = { rounds: 10, clip: 20, mode: 'both', hints: true, randomStart: false, autoNext: true, hostPlays: true, hostSound: true, skipPlayed: true };
 let btSaved = {}; try { btSaved = JSON.parse(localStorage.getItem(BT_KEY)) || {}; } catch { }
 const bt = {
   role: null,        // null | 'host' | 'player'
@@ -41,6 +41,21 @@ const genCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math
 const btPid = () => { let p = localStorage.getItem('versus.pid'); if (!p) { p = uid() + uid(); localStorage.setItem('versus.pid', p); } return p; };
 const btLink = code => location.origin + location.pathname.replace(/index\.html$/, '') + '?join=' + code;
 const btPool = () => col().items.filter(i => i.sp);
+/* Historique des sons déjà joués, par collection (pour rejouer avec des sons jamais joués). */
+const BT_HIST_KEY = 'versus.btplayed';
+const btHistAll = () => { try { return JSON.parse(localStorage.getItem(BT_HIST_KEY)) || {}; } catch { return {}; } };
+const btHist = () => new Set(btHistAll()[store.cur] || []);
+function btHistAdd(sp) {
+  if (!sp) return;
+  const all = btHistAll(), s = new Set(all[store.cur] || []); s.add(sp); all[store.cur] = [...s];
+  try { localStorage.setItem(BT_HIST_KEY, JSON.stringify(all)); } catch { }
+}
+function btHistReset() {
+  const all = btHistAll(); delete all[store.cur];
+  try { localStorage.setItem(BT_HIST_KEY, JSON.stringify(all)); } catch { }
+}
+const btFresh = () => { const h = btHist(); return btPool().filter(i => !h.has(i.sp)); };
+const btFreshText = () => { const n = btPool().length, f = btFresh().length; return f === n ? `${n} son${n > 1 ? 's' : ''}, aucun encore joué` : `${f} son${f > 1 ? 's' : ''} jamais joué${f > 1 ? 's' : ''} sur ${n}`; };
 
 /* ============ Comparaison des réponses (tolérante) ============ */
 function norm(s) {
@@ -104,6 +119,7 @@ function blindView() {
   <p class="hint">Un extrait de chaque son est joué : les joueurs écrivent le titre et/ou l’artiste le plus vite possible. Plus on répond vite, plus on marque.</p>
   <div class="panel bt-home">
     <div class="bt-pool"><b>${pool.length}</b> son${pool.length > 1 ? 's' : ''} Spotify dans « ${esc(c.name)} »
+      ${pool.length && btFresh().length < pool.length ? `<span class="hint" style="margin:0 0 0 8px">· ${btFresh().length} jamais joué${btFresh().length > 1 ? 's' : ''} <button class="linkbtn" data-action="bt-hist-reset">remettre à zéro</button></span>` : ''}
       ${ok ? '' : '<span class="err"> — ajoute-en au moins 4 avec le panneau ci-dessous</span>'}</div>
     <div class="row" style="margin-top:14px">
       <button class="btn" data-action="bt-host" ${ok ? '' : 'disabled'}>🌐 Créer un salon multijoueur</button>
@@ -220,7 +236,17 @@ async function btStart() {
   if (!connected) return toast('Il faut au moins un joueur (coche « Je joue aussi » ou invite des amis).');
   G.phase = 'loading'; G.loadMsg = 'Préparation des extraits audio…'; btUpdateHost(true);
   // on pioche d'abord dans les titres dont l'extrait est déjà connu (instantané), au hasard parmi eux
-  const want = G.s.rounds, pool = shuffle(btPool()).sort((a, b) => !!spPrev[b.sp] - !!spPrev[a.sp]);
+  const want = G.s.rounds, ord = arr => shuffle(arr).sort((a, b) => !!spPrev[b.sp] - !!spPrev[a.sp]);
+  let pool;
+  if (G.s.skipPlayed) {
+    // d'abord les sons jamais joués ; s'il n'y en a pas assez, on complète avec des sons déjà joués ; s'il n'y en a plus du tout, on repart de zéro
+    const h = btHist(), fresh = btPool().filter(i => !h.has(i.sp)), old = btPool().filter(i => h.has(i.sp));
+    if (!fresh.length) { btHistReset(); pool = ord(btPool()); toast('Tous les sons ont déjà été joués : on repart de zéro.'); }
+    else {
+      pool = [...ord(fresh), ...ord(old)];
+      if (fresh.length < want) toast(`Plus que ${fresh.length} son${fresh.length > 1 ? 's' : ''} jamais joué${fresh.length > 1 ? 's' : ''} : la fin de la partie reprend des sons déjà joués.`);
+    }
+  } else pool = ord(btPool());
   const valid = []; let i = 0;
   while (valid.length < want && i < pool.length) {
     const batch = pool.slice(i, i + Math.max(10, want - valid.length + 6)); i += batch.length;
@@ -289,7 +315,7 @@ function btCheckAllDone() {
 function btEndRound() {
   const G = bt.G; if (!G || G.phase !== 'playing') return;
   clearInterval(G.tick);
-  G.phase = 'reveal'; G.played.push(G.cur);
+  G.phase = 'reveal'; G.played.push(G.cur); btHistAdd(G.cur.sp);
   G.revEnds = G.s.autoNext ? Date.now() + 8000 : 0;
   btUpdateHost(true);
   if (G.s.autoNext) G.revT = setTimeout(btNextRound, 8000);
@@ -427,6 +453,11 @@ function hostView() {
       <div class="row" style="margin-top:12px;gap:18px">
         ${chk('hints', '💡 Indices (lettres)')}${chk('randomStart', '🎲 Début aléatoire')}${chk('autoNext', '⏩ Manche suivante auto')}${G.online ? chk('hostPlays', '🙋 Je joue aussi') : ''}${G.online ? chk('hostSound', '🔈 Son sur cet écran') : ''}
       </div>
+      <div class="row bt-fresh" style="margin-top:12px;gap:14px">
+        ${chk('skipPlayed', '🔁 Ne jouer que des sons jamais joués')}
+        <span class="hint" style="margin:0">${btFreshText()}</span>
+        <button class="linkbtn" data-action="bt-hist-reset">Remettre le compteur à zéro</button>
+      </div>
     </div>
     <div class="panel"><h2>Joueurs</h2><div id="btPlayers">${playersChips()}</div></div>
     <div style="text-align:center"><button class="btn" data-action="bt-start" ${G.ready ? '' : 'disabled'} style="font-size:18px;padding:14px 34px">▶ Lancer la partie</button></div>`;
@@ -450,7 +481,8 @@ function hostView() {
     <div class="duel-tools"><button class="btn" data-action="bt-next">${G.round >= G.total ? '🏁 Résultats' : 'Suivant →'}</button>
       <label class="vol">🔊 <input type="range" min="0" max="1" step="0.05" value="${btAudio.volume}" data-bt-vol></label></div>`;
   return `${topbar}<div class="champion"><div class="crown">🏆</div><h1>Fin de la partie</h1>${podiumHTML(st.players, 'host')}</div>
-    <div class="duel-tools"><button class="btn" data-action="bt-again">🔁 Rejouer</button><button class="btn ghost" data-action="bt-close">Quitter</button></div>${recapHTML(st.tracks)}`;
+    <p class="hint" style="text-align:center">${G.s.skipPlayed ? 'Prochaine partie : ' + btFreshText() + '.' : ''}</p>
+    <div class="duel-tools"><button class="btn" data-action="bt-again">🔁 Rejouer avec de nouveaux sons</button><button class="btn ghost" data-action="bt-close">Quitter</button></div>${recapHTML(st.tracks)}`;
 }
 function btPatchHost() {
   const G = bt.G; if (!G || ui.tab !== 'blind') return;
@@ -617,6 +649,7 @@ function blindAction(action, a) {
       if (G.phase === 'playing') btEndRound(); else if (G.phase === 'reveal') btNextRound(); return true;
     }
     case 'bt-again': btReset(); return true;
+    case 'bt-hist-reset': btHistReset(); toast('Compteur remis à zéro : tous les sons peuvent retomber.'); if (bt.G) btUpdateHost(true); else render(); return true;
     case 'bt-close': btClose(); return true;
     case 'bt-unlock': btUnlockSound(); return true;
     case 'bt-psound': {
