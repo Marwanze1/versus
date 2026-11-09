@@ -50,11 +50,19 @@ function cover(it, extra = '') {
 function renderHeader() {
   $('#colSelect').innerHTML = Object.values(store.cols).map(c => `<option value="${c.id}" ${c.id === store.cur ? 'selected' : ''}>${esc(c.name)} (${c.items.length})</option>`).join('');
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === ui.tab));
+  // bibliothèque (barre latérale) : une ligne par collection, comme les playlists de Spotify
+  $('#colList').innerHTML = Object.values(store.cols).map(c => `
+    <button class="lib-row ${c.id === store.cur ? 'on' : ''}" data-col="${c.id}">
+      ${cover(c.items.find(i => i.img) || { title: c.name }, 'lib-cov')}
+      <span><b>${esc(c.name)}</b><small>Collection · ${c.items.length} élément${c.items.length > 1 ? 's' : ''}</small></span>
+    </button>`).join('');
 }
 function render() {
-  document.body.classList.toggle('player-mode', bt.role === 'player');
+  document.body.classList.toggle('player-mode', bt.role === 'player' || !!lv.V);
+  if (lv.V) { $('#app').innerHTML = lvViewerView(); return; }   // spectateur d'un bracket en direct
   if (bt.role === 'player') { $('#app').innerHTML = playerView(); return; }
   renderHeader();
+  lvSync();   // bracket en direct : prévient les spectateurs si le duel a changé
   const app = $('#app');
   if (ui.tab === 'items') app.innerHTML = itemsView();
   else if (ui.tab === 'tier') app.innerHTML = tierView();
@@ -106,7 +114,7 @@ function itemsView() {
         <button class="icon-btn" data-action="item-del" data-id="${it.id}" title="Supprimer">✕</button>
       </div>
       <div class="t">${esc(it.title)}</div><div class="s">${esc(it.sub) || '&nbsp;'}</div>
-    </div>`).join('')}</div>` : '<div class="empty">Aucun élément pour l’instant. Ajoute-en ci-dessus 👆</div>'}`;
+    </div>`).join('')}</div>` : '<div class="empty">Aucun élément pour l’instant. Ajoute-en ci-dessus.</div>'}`;
 }
 function fileToSquare(file, size = 360) {
   return new Promise((res, rej) => {
@@ -262,16 +270,18 @@ function bracketView() {
   if (d.done) return championView(c, d);
   const m = d.rounds[d.r][d.m], A = itemById(m.a), B = itemById(m.b);
   const n = d.rounds[d.r].length;
-  const title = n === 1 ? 'Finale' : n === 2 ? 'Demi-finales' : `Round ${d.r + 1}`;
+  const title = lvRoundTitle(n, d.r);
   const side = (it, k) => `
     <div class="duel-card" data-pick="${k}">
       ${cover(it)}
       <div class="t">${esc(it.title)}</div><div class="s">${esc(it.sub) || '&nbsp;'}</div>
       ${it.sp ? `<iframe class="sp-embed" src="https://open.spotify.com/embed/track/${esc(it.sp)}?theme=0" width="100%" height="80" frameborder="0" allow="encrypted-media" loading="lazy"></iframe>` : ''}
       ${it.link && !it.sp ? `<a class="play" href="${esc(it.link)}" target="_blank" rel="noopener">▶ Écouter / voir</a>` : ''}
+      ${lvBar(k)}
       <div class="hintpick">Choisir ${k === 'a' ? '←' : '→'}</div>
     </div>`;
   return `
+  ${lvPanel()}
   <div class="round-head"><h1>${title}</h1><p>Match ${d.m + 1} / ${n}</p></div>
   <div class="progress"><i style="width:${(b.picks.length / total) * 100}%"></i></div>
   <div class="arena">${side(A, 'a')}<div class="vs">VS</div>${side(B, 'b')}</div>
@@ -286,20 +296,26 @@ function bracketView() {
 function setupView() {
   const c = col(), n = c.items.length;
   const sizes = [4, 8, 16, 32, 64, 128].filter(s => s <= n);
-  if (!sizes.length) return `<div class="empty">Il faut au moins 4 éléments pour lancer un bracket (tu en as ${n}).</div>`;
+  const viewer = `<div class="lv-joinrow"><span>Spectateur ? Rejoins un vote en direct :</span>
+    <input type="text" id="lvJoinCode" placeholder="CODE" maxlength="5" autocomplete="off"><button class="btn ghost sm" data-action="lv-join">Rejoindre</button></div>`;
+  if (!sizes.length) return `<div class="empty">Il faut au moins 4 éléments pour lancer un bracket (tu en as ${n}).</div>${viewer}`;
   if (!sizes.includes(ui.size)) ui.size = sizes[sizes.length - 1];
   return `
+  ${lvPanel()}
   <div class="setup">
     <h2>Lancer un tournoi</h2>
     <p class="hint">Choisis le nombre de participants. S’il y a plus d’éléments que de places, ils sont tirés au sort.</p>
     <div class="size-pick">${sizes.map(s => `<button class="${s === ui.size ? 'on' : ''}" data-size="${s}">${s}<small>${Math.log2(s)} rounds</small></button>`).join('')}</div>
     <label class="check"><input type="checkbox" id="mix" ${ui.mix ? 'checked' : ''}> Mélanger le tirage</label><br>
-    <button class="btn" data-action="b-start">⚔️ Lancer le bracket (${ui.size})</button>
-  </div>`;
+    <div class="row"><button class="btn" data-action="b-start">⚔️ Lancer le bracket (${ui.size})</button>
+      <button class="btn ghost" data-action="lv-start">📡 Lancer en direct (votes des spectateurs)</button></div>
+  </div>
+  ${viewer}`;
 }
 function championView(c, d) {
   const w = itemById(d.champion);
   return `
+  ${lvPanel()}
   <div class="champion">
     <div class="crown">👑</div><h1>Vainqueur du tournoi</h1>
     ${cover(w)}
@@ -399,6 +415,9 @@ document.addEventListener('click', async e => {
   const tab = e.target.closest('[data-tab]');
   if (tab) { ui.tab = tab.dataset.tab; ui.selected = null; return render(); }
 
+  const cb = e.target.closest('[data-col]');
+  if (cb) { store.cur = cb.dataset.col; ui.size = null; ui.editId = null; ui.selected = null; save(); return render(); }
+
   const sz = e.target.closest('[data-size]');
   if (sz) { ui.size = +sz.dataset.size; return render(); }
 
@@ -461,7 +480,7 @@ document.addEventListener('click', async e => {
     case 'b-tree': ui.showTree = !ui.showTree; render(); break;
     case 'b-reset': if (!c.bracket || await ask({ title: 'Abandonner ce tournoi ?', text: 'Les choix déjà faits seront perdus.', ok: 'Abandonner', danger: true })) { c.bracket = null; save(); render(); } break;
     case 'b-to-tier': bracketToTier(); break;
-    default: if (!spotifyAction(a.dataset.action, a)) blindAction(a.dataset.action, a);
+    default: if (!spotifyAction(a.dataset.action, a) && !liveAction(a.dataset.action, a)) blindAction(a.dataset.action, a);
   }
 });
 
@@ -505,7 +524,8 @@ document.addEventListener('drop', e => { const z = e.target.closest?.('[data-zon
 
 /* Démarrage : lien d'invitation (?join=CODE) → écran joueur ; retour de la connexion Spotify (?code=…) */
 {
-  const j = new URLSearchParams(location.search).get('join');
+  const q = new URLSearchParams(location.search), j = q.get('join'), v = q.get('vote');
   if (j) { bt.role = 'player'; bt.joinCode = j.toUpperCase().slice(0, 5); }
+  else if (v) setTimeout(() => lvJoin(v));   // lien / QR code d'un bracket en direct → écran spectateur
 }
 spotifyInit().finally(render);

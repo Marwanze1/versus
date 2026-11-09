@@ -569,12 +569,12 @@ function playerView() {
       <label class="vol" style="justify-content:center;margin:8px 0">🔊 <input type="range" min="0" max="1" step="0.05" value="${btPAudio.volume}" data-bt-pvol></label>
       <div class="bt-status" id="pStatus">${statusHTML(s, me)}</div>
       <form class="bt-form" onsubmit="event.preventDefault();btPlayerSubmit()">
-        <input type="text" id="btAnswer" placeholder="${done ? 'Tout trouvé ! 🎉' : 'Ta réponse…'}" ${ANSWER_ATTRS} ${done ? 'disabled' : ''}>
+        <input type="text" id="btAnswer" placeholder="${done ? 'Tout trouvé !' : 'Ta réponse…'}" ${ANSWER_ATTRS} ${done ? 'disabled' : ''}>
         <button class="btn" type="submit" ${done ? 'disabled' : ''}>OK</button></form>
       <div id="btFb" class="bt-fb"></div>
       <div class="bt-found" id="pFound">${foundHTML(s.players, s.mode)}</div>`;
   } else if (s.phase === 'reveal') body = `${head}${revealHTML(s.reveal)}
-    <div class="bt-mine">${me.g ? `Tu gagnes <b>+${me.g}</b> points 🎉` : 'Pas de point cette fois…'}</div>${scoreboardHTML(s.players, P.pid, true)}`;
+    <div class="bt-mine">${me.g ? `Tu gagnes <b>+${me.g}</b> points` : 'Pas de point cette fois…'}</div>${scoreboardHTML(s.players, P.pid, true)}`;
   else body = `<div class="champion" style="padding:10px"><div class="crown">🏆</div><h1>Fin de la partie</h1>
     <p class="hint">Tu finis <b>${rankOf(s.players, P.pid)}ᵉ</b> sur ${s.players.length} avec ${me.score} points</p>${podiumHTML(s.players, P.pid)}</div>${recapHTML(s.tracks || [])}`;
   return `<div class="bt-join">${top}${body}<div style="text-align:center;margin-top:16px">${quit}</div></div>`;
@@ -587,7 +587,7 @@ function btPatchPlayer() {
   if ($('#pHint')) $('#pHint').innerHTML = hintHTML({ ...s, found: P.found });
   if ($('#pStatus')) $('#pStatus').innerHTML = statusHTML(s, me);
   const done = s.phase === 'playing' && (s.mode === 'artist' || me.t) && (s.mode === 'title' || me.a);
-  const inp = $('#btAnswer'); if (inp && done) { inp.disabled = true; inp.placeholder = 'Tout trouvé ! 🎉'; $('.bt-form button').disabled = true; }
+  const inp = $('#btAnswer'); if (inp && done) { inp.disabled = true; inp.placeholder = 'Tout trouvé !'; $('.bt-form button').disabled = true; }
 }
 function btPlayerSubmit() {
   const P = bt.P, inp = $('#btAnswer'); if (!P || !inp || !inp.value.trim() || P.status !== 'open') return;

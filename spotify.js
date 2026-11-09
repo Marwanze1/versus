@@ -11,10 +11,10 @@ const spSetCfg = o => localStorage.setItem(SP_KEY, JSON.stringify({ ...spCfg(), 
 const spRedirect = () => location.origin + location.pathname.replace(/index\.html$/, '');
 const spConnected = () => !!spCfg().refresh;
 const SP_PACKS = [
-  ['🔥 Hits du moment', '37i9dQZF1DXcBWIGoYBM5M'], ['🇫🇷 Top 50 France', '37i9dQZEVXbIPWwFssbupI'],
-  ['🌍 Top 50 Monde', '37i9dQZEVXbMDoHDwVN2tF'], ['🎤 RapCaviar', '37i9dQZF1DX0XUsuxWHRQd'],
-  ['📼 Années 80', '37i9dQZF1DX4UtSsGT1Sbe'], ['💿 Années 90', '37i9dQZF1DXbTxeAdrVG2l'],
-  ['🪩 Années 2000', '37i9dQZF1DX4o1oenSJRJd'],
+  ['Hits du moment', '37i9dQZF1DXcBWIGoYBM5M'], ['Top 50 France', '37i9dQZEVXbIPWwFssbupI'],
+  ['Top 50 Monde', '37i9dQZEVXbMDoHDwVN2tF'], ['RapCaviar', '37i9dQZF1DX0XUsuxWHRQd'],
+  ['Années 80', '37i9dQZF1DX4UtSsGT1Sbe'], ['Années 90', '37i9dQZF1DXbTxeAdrVG2l'],
+  ['Années 2000', '37i9dQZF1DX4o1oenSJRJd'],
 ];
 const SP_PREV_KEY = 'versus.prev';
 const spPrev = {}; // id -> URL de l'extrait audio ('' = pas d'extrait)
@@ -205,6 +205,30 @@ async function spSearch(more = false) {
   render();
 }
 
+/* Toute une playlist via l'API officielle (compte connecté), par pages de 100. `first` = les titres déjà lus (repli si l'API refuse). */
+async function spApiPlaylistTracks(pid, first, fallbackCover) {
+  const token = await spToken();
+  if (!token) throw new Error('session Spotify expirée, reconnecte-toi.');
+  const out = [], seen = new Set(), pv = Object.fromEntries(first.map(i => [i.sp, i.preview]));
+  for (let offset = 0; offset < 5000; offset += 100) {
+    const r = await fetch(`https://api.spotify.com/v1/playlists/${pid}/tracks?` + new URLSearchParams({
+      limit: 100, offset, fields: 'next,items(is_local,track(id,name,artists(name),album(images)))',
+    }), { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 429) throw new Error('Spotify limite les requêtes, réessaie dans une minute.');
+    if (r.status === 401 || r.status === 403 || r.status === 404) throw new Error('Spotify ne laisse pas lire cette playlist avec ton compte.');
+    if (!r.ok) throw new Error('Erreur Spotify (' + r.status + ').');
+    const j = await r.json();
+    for (const it of j.items || []) {
+      const t = it.track;
+      if (!t || !t.id || it.is_local || seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push({ sp: t.id, title: t.name, sub: (t.artists || []).map(a => a.name).join(', '), img: pickImg(t.album?.images) || fallbackCover || '', preview: pv[t.id] || '' });
+    }
+    if (!j.next) break;
+  }
+  return out.length >= first.length ? out : first;
+}
+
 /* ---------- Import par lien ---------- */
 async function spFetch(url) {
   url = (url || $('#spUrl')?.value || ui.spUrl || '').trim();
@@ -214,6 +238,14 @@ async function spFetch(url) {
     const { status, obj: j } = await spCall({ url });
     if (status !== 200) throw new Error(j.error || 'Erreur');
     if (!j.items.length) throw new Error('Aucun titre trouvé dans ce lien.');
+    // Sans connexion, Spotify ne montre que les 100 premiers titres d'une playlist : avec un compte connecté, on les lit tous (API officielle).
+    const pm = SP_LINK_RE.exec(url);
+    if (j.kind === 'playlist' && j.items.length >= 100 && pm) {
+      if (spConnected()) {
+        try { j.items = await spApiPlaylistTracks(pm[2], j.items, j.cover); }
+        catch (e) { j.note = 'Seulement les 100 premiers titres : ' + e.message; }
+      } else j.note = 'Spotify ne donne que les 100 premiers titres sans connexion. Pour importer toute la playlist, connecte ton compte (onglet « Rechercher dans tout Spotify »), puis recolle le lien.';
+    }
     j.items.forEach(i => { if (i.preview) spPrev[i.sp] = i.preview; });
     spPrevSave();
     const have = new Set(col().items.map(i => i.sp).filter(Boolean));
@@ -283,6 +315,7 @@ function spotifyPanel() {
         </div>`).join('')}</div>`;
     } else {
       body += `
+      ${r.note ? `<p class="hint note">${esc(r.note)}</p>` : ''}
       <div class="row" style="justify-content:space-between;margin:12px 0 8px">
         <strong>${esc(r.name || 'Résultat')} · ${r.items.length} titre${r.items.length > 1 ? 's' : ''}</strong>
         <div class="row"><button class="btn ghost sm" data-action="sp-all">Tout cocher / décocher</button>
@@ -299,7 +332,7 @@ function spotifyPanel() {
   }
   return `
   <div class="panel spotify">
-    <h2>🟢 Ajouter des sons depuis Spotify</h2>
+    <h2>Ajouter des sons depuis Spotify</h2>
     <div class="mini-tabs">
       <button class="${mode === 'link' ? 'on' : ''}" data-action="sp-mode" data-id="link">🔗 Coller un lien</button>
       <button class="${mode === 'search' ? 'on' : ''}" data-action="sp-mode" data-id="search">🔎 Rechercher dans tout Spotify</button>
