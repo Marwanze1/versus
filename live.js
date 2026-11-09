@@ -288,11 +288,11 @@ function lvViewerView() {
     <div class="bt-round"><span class="rn">${esc(s.round).toUpperCase()}</span><span class="rm">Résultat</span></div>
     <p class="hint" style="text-align:center;margin:6px 0 12px">${r.tie ? 'Égalité : tirage au sort !' : (mine ? (mine === W ? 'Ton choix passe au tour suivant !' : 'Pas cette fois…') : '&nbsp;')}</p>
     <div class="lv-duel">${opt('a', s.a, W === 'a' ? 'win' : 'lose', `${lvPct(r.a, tot)} %${W === 'a' ? ' 🏆' : ''}`)}<div class="lv-vs">VS</div>${opt('b', s.b, W === 'b' ? 'win' : 'lose', `${lvPct(r.b, tot)} %${W === 'b' ? ' 🏆' : ''}`)}</div>`;
-  } else body = `
+  } else { finCelebrate('v' + s.key); body = `
     <div class="champion" style="padding:10px"><div class="crown">👑</div><h1>Vainqueur du tournoi</h1>
       ${cover({ title: s.champ.title, img: s.champ.img })}
       <div class="t">${esc(s.champ.title)}</div><div class="s">${esc(s.champ.sub)}</div>
-      <p class="hint" style="margin-top:14px">Merci d’avoir voté !</p></div>`;
+      <p class="hint" style="margin-top:14px">Merci d’avoir voté !</p></div>`; }
   return `<div class="bt-join lv-view">${top}${body}<div style="text-align:center;margin-top:18px">${quit}</div></div>`;
 }
 

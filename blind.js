@@ -322,12 +322,12 @@ function btEndRound() {
 }
 function btEndGame() {
   const G = bt.G; clearTimeout(G.revT); clearInterval(G.tick);
-  G.phase = 'end'; G.round = G.total; G.revEnds = 0;
+  G.phase = 'end'; G.round = G.total; G.revEnds = 0; G.endAt = Date.now();
   btAudio.pause(); btUpdateHost(true);
 }
 function btReset() {
   const G = bt.G; clearTimeout(G.revT); clearInterval(G.tick); btAudio.pause();
-  G.phase = 'lobby'; G.round = 0; G.cur = null; G.hint = null;
+  G.phase = 'lobby'; G.round = 0; G.cur = null; G.hint = null; G.endAt = 0;
   G.players.forEach(p => { p.score = 0; p.tFound = p.aFound = false; p.gained = 0; });
   btUpdateHost(true);
 }
@@ -410,10 +410,104 @@ function revealHTML(r) {
   return `<div class="bt-reveal">${cover(r)}<div class="t">${esc(r.title)}</div><div class="s">${esc(r.sub)}</div>
     <a class="play" href="https://open.spotify.com/track/${esc(r.sp)}" target="_blank" rel="noopener">▶ Ouvrir dans Spotify</a></div>`;
 }
+/* ============ Finale façon Kahoot : roulement de tambour, 3ᵉ → 2ᵉ → 1ʳᵉ place, confettis ============
+   Le déroulé est calculé à partir de l'heure de fin de partie (o.endAt) : si l'écran est redessiné en
+   cours de route, l'animation reprend au bon endroit au lieu de recommencer. */
+const SFX = {
+  ctx: null,
+  get ac() {
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { } }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => { });
+    return this.ctx;
+  },
+  tone(f, at, dur, type = 'sine', vol = .2) {
+    try {
+      const c = this.ac; if (!c) return;
+      const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + at;
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + .05);
+    } catch { }
+  },
+  drum(sec) { const n = Math.floor(sec * 16); for (let i = 0; i < n; i++) this.tone(95 + Math.random() * 25, i / 16, .1, 'triangle', .1 + .22 * i / n); },
+  reveal() { [392, 523].forEach((f, i) => this.tone(f, i * .09, .35, 'triangle', .22)); },
+  fanfare() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, i * .12, .5, 'square', .1)); [523, 659, 784].forEach(f => this.tone(f, .5, 1.3, 'triangle', .16)); },
+};
+function finConfetti(ms = 7000) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = document.createElement('canvas'), dpr = window.devicePixelRatio || 1;
+  cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:60';
+  const W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr, ctx = cv.getContext('2d');
+  document.body.appendChild(cv);
+  const colors = ['#1ed760', '#ffffff', '#f5c542', '#3be477', '#b3b3b3', '#ff6b9d', '#4dabf7'];
+  const P = Array.from({ length: 170 }, () => ({
+    x: Math.random() * W, y: -Math.random() * H * .7, w: (6 + Math.random() * 8) * dpr, h: (10 + Math.random() * 10) * dpr,
+    vx: (Math.random() - .5) * 3 * dpr, vy: (2 + Math.random() * 4) * dpr, r: Math.random() * 6.28, vr: (Math.random() - .5) * .3, c: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const t0 = performance.now();
+  (function frame(t) {
+    const el = t - t0; ctx.clearRect(0, 0, W, H); let alive = 0;
+    for (const p of P) {
+      p.x += p.vx + Math.sin(p.y / 60) * .6 * dpr; p.y += p.vy; p.r += p.vr;
+      if (el < ms - 2000 && p.y > H + 20) p.y = -20;      // les confettis retombent en boucle, puis s'arrêtent
+      if (p.y < H + 30) alive++;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    }
+    if (alive && el < ms) requestAnimationFrame(frame); else cv.remove();
+  })(t0);
+}
+let finLastKey = '';
+function finCelebrate(key) {   // confettis + fanfare une seule fois par vainqueur (ex. fin d'un bracket)
+  if (key === finLastKey) return; finLastKey = key;
+  setTimeout(() => { SFX.fanfare(); finConfetti(); }, 350);
+}
+const finO = () => bt.role === 'player' ? bt.P : bt.G;
+const finElapsed = () => {
+  const o = finO();
+  if (!o || !o.endAt || matchMedia('(prefers-reduced-motion: reduce)').matches) return 1e9;
+  return Date.now() - o.endAt;
+};
+/* instant d'apparition de chaque place (rang 1 = vainqueur) selon le nombre de places sur le podium */
+function finTimes(n) {
+  const t = {}; for (let r = n; r >= 2; r--) t[r] = 2000 + (n - r) * 2200;
+  t[1] = n === 1 ? 3200 : 2000 + (n - 1) * 2200 + 1300; return t;
+}
+const finEnd = n => finTimes(n)[1] + 2800;
+const finTitle = (el, n) => el >= finTimes(n)[1] ? 'Félicitations !' : n >= 2 && el >= finTimes(n)[2] ? 'Qui sera premier ?' : 'Roulement de tambour…';
+function finReveal(el) {
+  if (el.classList.contains('in')) return;
+  el.classList.add('in');
+  const r = +el.dataset.r, n = $$('.podium .pod[data-r]').length, title = $('#finTitle');
+  if (r === 1) { SFX.fanfare(); finConfetti(); $('.podium')?.classList.remove('suspense'); } else SFX.reveal();
+  if (title) { if (r === 1) title.textContent = 'Félicitations !'; else if (r === 2) title.textContent = 'Qui sera premier ?'; title.classList.remove('drum'); }
+  const pp = el.querySelector('.pp'), to = +pp.dataset.score, t0 = Date.now();
+  const iv = setInterval(() => {      // les points « montent » jusqu'au score (setInterval : continue même si l'onglet est en arrière-plan)
+    const k = Math.min(1, (Date.now() - t0) / 1100); pp.textContent = Math.round(to * k * (2 - k)) + ' pts';
+    if (k >= 1) clearInterval(iv);
+  }, 40);
+}
+function finShowAfter() { $('.fin-after')?.classList.add('in'); $('.fin-skip')?.remove(); }
+/* Appelée après chaque affichage : (re)programme l'animation si le podium vient d'être redessiné. */
+function btFinaleTick() {
+  const pod = $('.podium[data-fin]');
+  if (!pod) { FIN.timers.forEach(clearTimeout); FIN.timers = []; FIN.dom = null; return; }
+  if (FIN.dom === pod) return;
+  FIN.dom = pod; FIN.timers.forEach(clearTimeout); FIN.timers = [];
+  const el = finElapsed(), pods = $$('.podium .pod[data-r]'), n = pods.length, T = finTimes(n);
+  if (el < 400 && n) SFX.drum(1.8);
+  pods.forEach(p => { const at = T[+p.dataset.r] - el; if (at <= 0) { p.classList.add('in'); p.querySelector('.pp').textContent = p.querySelector('.pp').dataset.score + ' pts'; } else FIN.timers.push(setTimeout(() => finReveal(p), at)); });
+  const sus = T[1] - 1300 - el;                                   // suspense avant la 1ʳᵉ place
+  if (n && sus > -1300 && T[1] - el > 0) FIN.timers.push(setTimeout(() => { SFX.drum(1.3); pod.classList.add('suspense'); const t = $('#finTitle'); if (t) { t.textContent = 'Qui sera premier ?'; t.classList.add('drum'); } }, Math.max(0, sus)));
+  const done = finEnd(n) - el; if (done <= 0) finShowAfter(); else FIN.timers.push(setTimeout(finShowAfter, done));
+}
+const FIN = { timers: [], dom: null };
 function podiumHTML(players, meId) {
-  const list = [...players].sort((a, b) => b.score - a.score), top = list.slice(0, 3);
-  const order = [top[1], top[0], top[2]], cls = ['p2', 'p1', 'p3'], medal = ['🥈', '🥇', '🥉'];
-  return `<div class="podium">${order.map((p, i) => p ? `<div class="pod ${cls[i]} ${p.pid === meId ? 'me' : ''}"><div class="medal">${medal[i]}</div><div class="pn">${esc(p.name)}</div><div class="pp">${p.score} pts</div></div>` : '<div class="pod empty"></div>').join('')}</div>${scoreboardHTML(players, meId)}`;
+  const top = [...players].sort((a, b) => b.score - a.score).slice(0, 3);
+  const order = [2, 1, 3].filter(r => top[r - 1]);                   // gauche = 2ᵉ, milieu = 1ᵉʳ, droite = 3ᵉ
+  const medal = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  return `<div class="podium" data-fin="1">${order.map(r => { const p = top[r - 1]; return `
+    <div class="pod p${r} ${p.pid === meId ? 'me' : ''}" data-r="${r}"><div class="pi">
+      ${r === 1 ? '<div class="pcrown">👑</div>' : ''}<div class="pmedal">${medal[r]}</div><div class="pn">${esc(p.name)}</div><div class="pp" data-score="${p.score}">0 pts</div></div></div>`; }).join('')}</div>`;
 }
 const recapHTML = tracks => `<div class="tree-title">Les sons de la partie</div><div class="recap">${tracks.map(t => `
   <a class="rc" href="https://open.spotify.com/track/${esc(t.sp)}" target="_blank" rel="noopener">${cover(t)}<b>${esc(t.title)}</b><small>${esc(t.sub)}</small></a>`).join('')}</div>`;
@@ -480,9 +574,12 @@ function hostView() {
     <div class="bt-gains">${scoreboardHTML(st.players, 'host', true)}</div>
     <div class="duel-tools"><button class="btn" data-action="bt-next">${G.round >= G.total ? '🏁 Résultats' : 'Suivant →'}</button>
       <label class="vol">🔊 <input type="range" min="0" max="1" step="0.05" value="${btAudio.volume}" data-bt-vol></label></div>`;
-  return `${topbar}<div class="champion"><div class="crown">🏆</div><h1>Fin de la partie</h1>${podiumHTML(st.players, 'host')}</div>
+  const n = Math.min(3, st.players.length), el = finElapsed(), over = el >= finEnd(n);
+  return `${topbar}<div class="champion fin"><h1 id="finTitle">${finTitle(el, n)}</h1>${podiumHTML(st.players, 'host')}
+      ${over ? '' : '<button class="linkbtn fin-skip" data-action="fin-skip">Passer l’animation</button>'}</div>
+    <div class="fin-after ${over ? 'in' : ''}">${scoreboardHTML(st.players, 'host')}
     <p class="hint" style="text-align:center">${G.s.skipPlayed ? 'Prochaine partie : ' + btFreshText() + '.' : ''}</p>
-    <div class="duel-tools"><button class="btn" data-action="bt-again">🔁 Rejouer avec de nouveaux sons</button><button class="btn ghost" data-action="bt-close">Quitter</button></div>${recapHTML(st.tracks)}`;
+    <div class="duel-tools"><button class="btn" data-action="bt-again">🔁 Rejouer avec de nouveaux sons</button><button class="btn ghost" data-action="bt-close">Quitter</button></div>${recapHTML(st.tracks)}</div>`;
 }
 function btPatchHost() {
   const G = bt.G; if (!G || ui.tab !== 'blind') return;
@@ -526,6 +623,7 @@ function btPlayerConnect() {
   conn.on('open', () => { clearTimeout(timeout); P.status = 'open'; P.tries = 0; conn.send({ t: 'join', pid: P.pid, name: P.name }); });
   conn.on('data', m => {
     if (m.t === 'state') {
+      P.endAt = m.s.phase === 'end' ? (P.endAt || Date.now()) : 0;   // début de l'animation du podium
       P.state = m.s; P.stateAt = Date.now(); P.endsAt = Date.now() + (m.s.remaining || 0);
       const key = m.s.phase + ':' + m.s.round;
       btPlayerAudio();
@@ -607,8 +705,13 @@ function playerView() {
       <div class="bt-found" id="pFound">${foundHTML(s.players, s.mode)}</div>`;
   } else if (s.phase === 'reveal') body = `${head}${revealHTML(s.reveal)}
     <div class="bt-mine">${me.g ? `Tu gagnes <b>+${me.g}</b> points` : 'Pas de point cette fois…'}</div>${scoreboardHTML(s.players, P.pid, true)}`;
-  else body = `<div class="champion" style="padding:10px"><div class="crown">🏆</div><h1>Fin de la partie</h1>
-    <p class="hint">Tu finis <b>${rankOf(s.players, P.pid)}ᵉ</b> sur ${s.players.length} avec ${me.score} points</p>${podiumHTML(s.players, P.pid)}</div>${recapHTML(s.tracks || [])}`;
+  else {
+    const n = Math.min(3, s.players.length), el = finElapsed(), over = el >= finEnd(n);
+    body = `<div class="champion fin" style="padding:10px"><h1 id="finTitle">${finTitle(el, n)}</h1>${podiumHTML(s.players, P.pid)}
+      ${over ? '' : '<button class="linkbtn fin-skip" data-action="fin-skip">Passer l’animation</button>'}</div>
+      <div class="fin-after ${over ? 'in' : ''}"><p class="hint" style="text-align:center">Tu finis <b>${rankOf(s.players, P.pid)}ᵉ</b> sur ${s.players.length} avec ${me.score} points</p>
+      ${scoreboardHTML(s.players, P.pid)}${recapHTML(s.tracks || [])}</div>`;
+  }
   return `<div class="bt-join">${top}${body}<div style="text-align:center;margin-top:16px">${quit}</div></div>`;
 }
 const statusHTML = (s, me) => [s.mode !== 'artist' && `<span class="${me.t ? 'ok' : ''}">🎵 Titre ${me.t ? '✓' : ''}</span>`, s.mode !== 'title' && `<span class="${me.a ? 'ok' : ''}">🎤 Artiste ${me.a ? '✓' : ''}</span>`].filter(Boolean).join('');
@@ -649,6 +752,7 @@ function blindAction(action, a) {
       if (G.phase === 'playing') btEndRound(); else if (G.phase === 'reveal') btNextRound(); return true;
     }
     case 'bt-again': btReset(); return true;
+    case 'fin-skip': { const o = finO(); if (o) o.endAt = Date.now() - 60000; FIN.timers.forEach(clearTimeout); FIN.timers = []; FIN.dom = null; render(); return true; }
     case 'bt-hist-reset': btHistReset(); toast('Compteur remis à zéro : tous les sons peuvent retomber.'); if (bt.G) btUpdateHost(true); else render(); return true;
     case 'bt-close': btClose(); return true;
     case 'bt-unlock': btUnlockSound(); return true;

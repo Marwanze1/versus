@@ -60,7 +60,7 @@ function renderHeader() {
 function render() {
   document.body.classList.toggle('player-mode', bt.role === 'player' || !!lv.V);
   if (lv.V) { $('#app').innerHTML = lvViewerView(); return; }   // spectateur d'un bracket en direct
-  if (bt.role === 'player') { $('#app').innerHTML = playerView(); return; }
+  if (bt.role === 'player') { $('#app').innerHTML = playerView(); btFinaleTick(); return; }
   renderHeader();
   lvSync();   // bracket en direct : prévient les spectateurs si le duel a changé
   const app = $('#app');
@@ -69,6 +69,7 @@ function render() {
   else if (ui.tab === 'blind') app.innerHTML = blindView();
   else app.innerHTML = bracketView();
   if (ui.tab === 'items') bindItemsForm();
+  btFinaleTick();   // podium animé du blind test (ne fait rien ailleurs)
 }
 
 /* ============ Items tab ============ */
@@ -314,6 +315,7 @@ function setupView() {
 }
 function championView(c, d) {
   const w = itemById(d.champion);
+  finCelebrate(c.id + ':' + c.bracket.seed.length + ':' + c.bracket.picks.length);   // confettis + fanfare
   return `
   ${lvPanel()}
   <div class="champion">
