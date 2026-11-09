@@ -206,7 +206,9 @@ function btBroadcast() {
 function btUpdateHost(full) {
   const G = bt.G; if (!G) return;
   const key = G.phase + ':' + G.round;
-  if (full || key !== G.key) { G.key = key; if (ui.tab === 'blind' && bt.role === 'host') render(); }
+  if (full || key !== G.key) {
+    G.key = key; if (ui.tab === 'blind' && bt.role === 'host') { render(); if (G.phase === 'playing') $('#btAnswer')?.focus(); }
+  }
   else btPatchHost();
   btBroadcast();
 }
@@ -338,12 +340,17 @@ function btHostSubmit() {
 }
 
 /* ============ Vues communes ============ */
+const EQ_BARS = '<i></i><i></i><i></i><i></i><i></i>';
+const EQ_HTML = `<div class="eq">${EQ_BARS}</div>`;
+// champ de réponse : pas de correction automatique, bouton « Envoyer » sur le clavier du téléphone
+const ANSWER_ATTRS = 'autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"';
 const fbText = fb => fb.miss ? '❌ Raté, essaie encore !'
   : '✅ ' + [fb.title && 'Titre', fb.artist && 'Artiste'].filter(Boolean).join(' + ') + ' trouvé ! +' + fb.pts;
 function btShowFb(fb) {
   const el = $('#btFb'); if (!el) return;
   el.textContent = fbText(fb); el.className = 'bt-fb ' + (fb.miss ? 'miss' : 'ok');
   if (!fb.miss) navigator.vibrate?.(60);
+  else { const inp = $('#btAnswer'); if (inp) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); } }
 }
 const rankOf = (players, pid) => [...players].sort((a, b) => b.score - a.score).findIndex(p => p.pid === pid) + 1;
 function scoreboardHTML(players, meId, showGain) {
@@ -407,7 +414,7 @@ function hostView() {
       <div class="bt-code">${G.ready ? G.code : '…'}</div>
       ${G.ready ? `<button class="btn sm" data-action="bt-copy">📋 Copier le lien d’invitation</button>
       <p class="hint" style="margin:10px 0 0">Les joueurs ouvrent le lien sur leur téléphone, ou vont sur le site → Blind test → « Rejoindre » + code.</p>
-      ${local ? '<p class="hint err" style="margin:8px 0 0">⚠ Tu es en local : tes amis ne pourront pas ouvrir ce lien. Mets le site en ligne (Vercel) pour jouer à plusieurs, ou teste avec un 2ᵉ onglet.</p>' : ''}` : '<p class="hint">Connexion au serveur de jeu…</p>'}
+      ${local ? '<p class="hint err" style="margin:8px 0 0">⚠ Tu es en local : tes amis ne pourront pas ouvrir ce lien. Ouvre le site en ligne (marwanze1.github.io/versus) pour jouer à plusieurs, ou teste avec un 2ᵉ onglet.</p>' : ''}` : '<p class="hint">Connexion au serveur de jeu…</p>'}
     </div>` : ''}
     <div class="panel">
       <h2>Réglages de la partie</h2>
@@ -425,15 +432,15 @@ function hostView() {
     <div style="text-align:center"><button class="btn" data-action="bt-start" ${G.ready ? '' : 'disabled'} style="font-size:18px;padding:14px 34px">▶ Lancer la partie</button></div>`;
   }
   if (G.phase === 'loading') return `${topbar}<div class="bt-center"><div class="vinyl spinning"></div><h2>${esc(G.loadMsg)}</h2></div>`;
-  const header = `<div class="round-head"><h1>Manche ${G.round} / ${G.total}</h1><p>Trouve ${modeLabel(s.mode)}</p></div>`;
+  const header = `<div class="bt-round"><span class="rn">MANCHE ${G.round} / ${G.total}</span><span class="rm">Trouve ${modeLabel(s.mode)}</span></div>`;
   if (G.phase === 'countdown') return `${topbar}${header}<div class="bt-center"><div class="bt-big" id="btCount">3</div><p class="hint">Prépare-toi…</p></div>`;
   if (G.phase === 'playing') {
     const fb = G.players.has('host');
     return `${topbar}${header}
     <div class="progress"><i id="btBar" style="width:0%"></i></div>
-    <div class="bt-stage"><div class="vinyl spinning"></div><div class="bt-timer" id="btTimer">${G.s.clip}</div><div class="bt-hint" id="btHint">${hintHTML({ ...st, found: btHostFound() })}</div></div>
+    <div class="bt-stage"><div class="np-cover">${EQ_HTML}</div><div class="bt-timer" id="btTimer">${G.s.clip}</div><div class="bt-hint" id="btHint">${hintHTML({ ...st, found: btHostFound() })}</div></div>
     <div id="btSound">${G.needSound ? '<button class="btn" data-action="bt-sound">🔊 Clique ici pour activer le son</button>' : ''}</div>
-    ${fb ? `<form class="bt-form" onsubmit="event.preventDefault();btHostSubmit()"><input type="text" id="btAnswer" placeholder="Ta réponse (${modeLabel(s.mode)})…" autocomplete="off" autocapitalize="off"><button class="btn" type="submit">Valider</button></form><div id="btFb" class="bt-fb"></div>` : ''}
+    ${fb ? `<form class="bt-form" onsubmit="event.preventDefault();btHostSubmit()"><input type="text" id="btAnswer" placeholder="Ta réponse (${modeLabel(s.mode)})…" ${ANSWER_ATTRS}><button class="btn" type="submit">Valider</button></form><div id="btFb" class="bt-fb"></div>` : ''}
     <div class="bt-found" id="btFound">${foundHTML(st.players, s.mode)}</div>
     <div class="duel-tools"><button class="btn ghost sm" data-action="bt-next">⏭ Passer</button>
       <label class="vol">🔊 <input type="range" min="0" max="1" step="0.05" value="${btAudio.volume}" data-bt-vol></label></div>`;
@@ -490,7 +497,7 @@ function btPlayerConnect() {
       P.state = m.s; P.stateAt = Date.now(); P.endsAt = Date.now() + (m.s.remaining || 0);
       const key = m.s.phase + ':' + m.s.round;
       btPlayerAudio();
-      if (key !== P.key) { P.key = key; P.fb = null; P.found = null; render(); } else btPatchPlayer();
+      if (key !== P.key) { P.key = key; P.fb = null; P.found = null; render(); if (m.s.phase === 'playing') $('#btAnswer')?.focus(); } else btPatchPlayer();
     } else if (m.t === 'fb') {
       P.fb = m; btShowFb(m);
       if (m.titleTxt) P.found = { ...P.found, t: { txt: m.titleTxt } };
@@ -542,7 +549,7 @@ function playerView() {
   const s = P.state, me = s.players.find(p => p.pid === P.pid) || { score: 0, t: false, a: false, g: 0 };
   const top = `<div class="bt-ptop"><span>${esc(P.name)}</span><span class="bt-chip">${esc(P.code)}</span><span><b>${me.score}</b> pts</span></div>
     ${P.status === 'closed' ? '<div class="bt-warn">Connexion perdue… reconnexion en cours</div>' : ''}`;
-  const head = `<div class="round-head" style="padding:12px"><h1 style="font-size:24px">Manche ${s.round} / ${s.total}</h1><p style="margin-top:6px;font-size:15px">Trouve ${modeLabel(s.mode)}</p></div>`;
+  const head = `<div class="bt-round"><span class="rn">MANCHE ${s.round} / ${s.total}</span><span class="rm">Trouve ${modeLabel(s.mode)}</span></div>`;
   let body = '';
   if (s.phase === 'lobby') body = `<div class="bt-center"><h2>✅ Tu es dans le salon !</h2><p class="hint">En attendant que l’hôte lance la partie…<br>Réglages : ${modeLabel(s.mode)} · extraits de ${s.clip} s</p>
     <p class="hint">🔊 La musique sera jouée sur ton appareil : monte le volume !</p>
@@ -553,6 +560,7 @@ function playerView() {
   else if (s.phase === 'playing') {
     const done = (s.mode === 'artist' || me.t) && (s.mode === 'title' || me.a);
     body = `${head}<div class="progress"><i id="pBar" style="width:0%"></i></div>
+      <div class="eq sm">${EQ_BARS}</div>
       <div class="bt-timer" id="pTimer">${s.clip}</div>
       <div class="bt-hint" id="pHint">${hintHTML({ ...s, found: P.found })}</div>
       ${P.needSound ? '<div style="text-align:center;margin:10px 0"><button class="btn" data-action="bt-psound">🔊 Clique ici pour activer le son</button></div>' : ''}
@@ -561,7 +569,7 @@ function playerView() {
       <label class="vol" style="justify-content:center;margin:8px 0">🔊 <input type="range" min="0" max="1" step="0.05" value="${btPAudio.volume}" data-bt-pvol></label>
       <div class="bt-status" id="pStatus">${statusHTML(s, me)}</div>
       <form class="bt-form" onsubmit="event.preventDefault();btPlayerSubmit()">
-        <input type="text" id="btAnswer" placeholder="${done ? 'Tout trouvé ! 🎉' : 'Ta réponse…'}" autocomplete="off" autocapitalize="off" ${done ? 'disabled' : ''}>
+        <input type="text" id="btAnswer" placeholder="${done ? 'Tout trouvé ! 🎉' : 'Ta réponse…'}" ${ANSWER_ATTRS} ${done ? 'disabled' : ''}>
         <button class="btn" type="submit" ${done ? 'disabled' : ''}>OK</button></form>
       <div id="btFb" class="bt-fb"></div>
       <div class="bt-found" id="pFound">${foundHTML(s.players, s.mode)}</div>`;

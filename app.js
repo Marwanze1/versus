@@ -53,6 +53,7 @@ function renderHeader() {
 }
 function render() {
   document.body.classList.toggle('player-mode', bt.role === 'player');
+  document.body.classList.toggle('bt-skin', bt.role === 'player' || ui.tab === 'blind'); // thème « Spotify » du blind test
   if (bt.role === 'player') { $('#app').innerHTML = playerView(); return; }
   renderHeader();
   const app = $('#app');

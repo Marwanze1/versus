@@ -337,3 +337,146 @@ body.player-mode .shell{min-height:calc(100vh - 28px)}
   .round-head h1{font-size:26px}
   .shell{padding:12px}
 }
+
+/* =====================================================================
+   THÈME « SPOTIFY » du blind test (actif sur l'onglet Blind test et l'écran joueur)
+   Vert #1ed760, fonds #121212 / #181818, boutons en pilule, listes façon Spotify.
+   ===================================================================== */
+body.bt-skin{
+  --bg:#121212;--card:#181818;--card2:#181818;--line:#2a2a2a;--text:#fff;--muted:#b3b3b3;
+  --orange:#1ed760;--orange2:#3be477;--glow:none;--r:12px;
+  background:#000;
+  font-family:"Circular Std",Circular,"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+body.bt-skin .shell{border:0;border-radius:14px;background:linear-gradient(180deg,#1f4a31 0,#121212 380px),#121212;box-shadow:none}
+body.bt-skin .logo{color:#fff;text-shadow:none;letter-spacing:2px}
+body.bt-skin h2{font-size:26px;font-weight:800;letter-spacing:-.3px;margin-bottom:6px}
+body.bt-skin .hint{color:var(--muted)}
+body.bt-skin .panel{background:#181818;border:0;border-radius:12px;padding:20px}
+body.bt-skin .tabs{border-bottom:0;padding-bottom:4px}
+body.bt-skin .tab{background:#2a2a2a;border:0;border-radius:500px;color:#fff;padding:8px 18px;font-weight:600;font-size:14px}
+body.bt-skin .tab:hover{background:#3a3a3a}
+body.bt-skin .tab.active{background:#fff;color:#000;box-shadow:none}
+body.bt-skin select,body.bt-skin input[type=text],body.bt-skin input[type=url]{background:#2a2a2a;border:1px solid transparent;border-radius:500px;padding:11px 18px;color:#fff}
+body.bt-skin select:focus,body.bt-skin input:focus{border-color:#fff;box-shadow:none}
+body.bt-skin input::placeholder{color:#8c8c8c}
+/* boutons : pilules */
+body.bt-skin .btn{background:#1ed760;color:#000;border-radius:500px;padding:12px 28px;font-weight:700;box-shadow:none;filter:none;transition:transform .1s,background .15s}
+body.bt-skin .btn:hover{background:#3be477;transform:scale(1.04);filter:none}
+body.bt-skin .btn:active{transform:scale(.98)}
+body.bt-skin .btn.ghost{background:transparent;border:1px solid #727272;color:#fff}
+body.bt-skin .btn.ghost:hover{border-color:#fff;background:transparent}
+body.bt-skin .btn.danger:hover{border-color:#f15e6c;color:#f15e6c}
+body.bt-skin .btn.sm{padding:8px 16px;font-size:13px}
+body.bt-skin .btn:disabled{opacity:.4;transform:none}
+body.bt-skin .mini-tabs button{background:#2a2a2a;border:0;color:#fff}
+body.bt-skin .mini-tabs button.on{background:#fff;color:#000}
+body.bt-skin .chip-btn{background:#2a2a2a;border:0;color:#fff}
+body.bt-skin .chip-btn:hover{background:#3a3a3a;color:#1ed760}
+/* interrupteurs façon Spotify */
+body.bt-skin .check{color:#fff;font-size:14px;gap:10px}
+body.bt-skin .check input[type=checkbox]{appearance:none;-webkit-appearance:none;width:40px;height:22px;border-radius:99px;background:#535353;position:relative;cursor:pointer;flex:none;transition:background .15s}
+body.bt-skin .check input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+body.bt-skin .check input[type=checkbox]:checked{background:#1ed760}
+body.bt-skin .check input[type=checkbox]:checked::after{transform:translateX(18px)}
+body.bt-skin .check input[type=checkbox]:disabled{opacity:.4;cursor:not-allowed}
+
+/* barre du haut du jeu + pastille du salon */
+body.bt-skin .bt-top{font-size:18px}
+body.bt-skin .bt-chip{border:0;background:#1ed760;color:#000;font-weight:800;letter-spacing:2px;padding:4px 12px}
+body.bt-skin .bt-chip b{letter-spacing:3px}
+body.bt-skin .bt-pool b{color:#1ed760}
+body.bt-skin .bt-or{color:var(--muted)}
+
+/* carte du code du salon : tuile verte */
+body.bt-skin .bt-code-card{background:linear-gradient(135deg,#1ed760 0%,#12a14a 100%);border:0;border-radius:16px;padding:24px;box-shadow:0 12px 40px rgba(30,215,96,.18)}
+body.bt-skin .bt-code-card small{color:rgba(0,0,0,.65);font-weight:700}
+body.bt-skin .bt-code{color:#000;text-shadow:none;font-size:60px}
+body.bt-skin .bt-code-card .hint{color:rgba(0,0,0,.7)}
+body.bt-skin .bt-code-card .btn{background:#000;color:#fff}
+body.bt-skin .bt-code-card .btn:hover{background:#222}
+body.bt-skin .bt-code-card .hint.err{color:#5a0a10;font-weight:600}
+body.bt-skin .bt-grid label{color:var(--muted);font-weight:600}
+body.bt-skin .bt-plist li{background:#2a2a2a;border:0}
+body.bt-skin .av{background:linear-gradient(135deg,hsl(var(--h) 65% 45%),hsl(calc(var(--h) + 40) 65% 28%))}
+
+/* en-tête de manche */
+.bt-round{display:flex;flex-direction:column;align-items:center;gap:2px;margin:4px 0 12px}
+.bt-round .rn{font-size:12px;letter-spacing:3px;font-weight:800;color:var(--orange)}
+.bt-round .rm{font-size:20px;font-weight:800}
+body.bt-skin .progress{height:4px;background:#4d4d4d;margin:10px 0 18px}
+body.bt-skin .progress i{background:#1ed760;box-shadow:none}
+body.bt-skin .bt-big{color:#1ed760;text-shadow:none;font-weight:900}
+
+/* « en cours de lecture » : pochette mystère + égaliseur */
+.np-cover{width:190px;height:190px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#2b2b2b,#101010);box-shadow:0 10px 40px rgba(0,0,0,.6)}
+.eq{display:flex;align-items:flex-end;gap:6px;height:84px}
+.eq i{display:block;width:10px;height:30%;border-radius:4px;background:#1ed760;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.7s}.eq i:nth-child(3){animation-delay:-.35s}.eq i:nth-child(4){animation-delay:-.85s}.eq i:nth-child(5){animation-delay:-.15s}
+.eq.sm{height:26px;gap:3px;justify-content:center;margin:6px auto 0}
+.eq.sm i{width:4px}
+@keyframes eq{0%,100%{height:18%}50%{height:100%}}
+body.bt-skin .bt-timer{color:#fff;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums}
+body.bt-skin .bt-timer::after{content:" s";font-size:.45em;color:var(--muted);font-weight:600}
+body.bt-skin .vinyl{width:64px;height:64px;background:none;border:6px solid #2a2a2a;border-top-color:#1ed760;box-shadow:none}
+
+/* indices : titre / artiste */
+body.bt-skin .bt-hint{color:#fff}
+body.bt-skin .bt-hint small{color:var(--muted);font-weight:700}
+body.bt-skin .bt-hint .hfound{color:#1ed760;text-shadow:none}
+body.bt-skin .bt-hint .hfound em{color:var(--muted)}
+
+/* champ de réponse */
+body.bt-skin .bt-form{max-width:620px}
+body.bt-skin .bt-form input{background:#2a2a2a;border-radius:500px;padding:15px 22px;font-size:18px}
+body.bt-skin .bt-form input:focus{border-color:#1ed760}
+body.bt-skin .bt-form .btn{padding:0 28px}
+.bt-form input.shake{animation:shake .35s;border-color:#f15e6c !important}
+@keyframes shake{20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+body.bt-skin .bt-fb{font-size:16px}
+body.bt-skin .bt-fb.ok{color:#1ed760}
+body.bt-skin .bt-fb.miss{color:#f15e6c}
+body.bt-skin .fchip{background:#2a2a2a;border:0;color:var(--muted)}
+body.bt-skin .fchip.ok{background:rgba(30,215,96,.16);color:#1ed760}
+body.bt-skin .bt-status span{background:#2a2a2a;border:0;color:var(--muted)}
+body.bt-skin .bt-status span.ok{background:rgba(30,215,96,.16);color:#1ed760}
+
+/* révélation */
+body.bt-skin .bt-reveal{padding:10px 0 4px}
+body.bt-skin .bt-reveal .cover{width:min(230px,70%);border-radius:10px;border:0;box-shadow:0 12px 44px rgba(0,0,0,.65)}
+body.bt-skin .bt-reveal .t{font-size:30px;font-weight:800;letter-spacing:-.4px}
+body.bt-skin .bt-reveal .s{color:var(--muted)}
+body.bt-skin .bt-reveal .play{background:#1ed760;color:#000;border:0;font-weight:700;padding:9px 20px}
+body.bt-skin .bt-reveal .play:hover{background:#3be477;color:#000}
+body.bt-skin .bt-mine b{color:#1ed760}
+
+/* classement : liste de titres Spotify */
+body.bt-skin .bt-score{max-width:620px;gap:2px}
+body.bt-skin .bt-score li{background:transparent;border:0;border-radius:6px;padding:10px 14px}
+body.bt-skin .bt-score li:hover{background:#2a2a2a}
+body.bt-skin .bt-score li.me{background:rgba(30,215,96,.12);box-shadow:none}
+body.bt-skin .bt-score li.me .nm{color:#1ed760}
+body.bt-skin .bt-score .rk{color:var(--muted);font-weight:700}
+body.bt-skin .bt-score .gain{color:#1ed760}
+body.bt-skin .bt-score .pt{font-variant-numeric:tabular-nums}
+body.bt-skin .pod{background:#242424;border:0}
+body.bt-skin .pod.p1{background:linear-gradient(180deg,#1ed760,#12a14a);color:#000;box-shadow:none}
+body.bt-skin .pod.p1 .pp{color:rgba(0,0,0,.75)}
+body.bt-skin .pod.me{outline:2px solid #fff}
+body.bt-skin .pod .pp{color:#1ed760}
+body.bt-skin .champion h1{color:#fff;text-shadow:none}
+body.bt-skin .rc{background:#181818;border:0}
+body.bt-skin .rc:hover{background:#2a2a2a}
+body.bt-skin .vol input{accent-color:#1ed760}
+body.bt-skin .bt-warn{background:#2a2a2a;border:1px solid #f15e6c}
+body.bt-skin .tree-title{color:var(--muted)}
+body.bt-skin #toast{background:#fff;color:#000;border:0}
+body.bt-skin #toast button{color:#117a37}
+
+@media (max-width:720px){
+  .np-cover{width:140px;height:140px}
+  .eq{height:60px}
+  body.bt-skin .bt-code{font-size:46px}
+  body.bt-skin .bt-form .btn{padding:0 20px}
+}
