@@ -318,7 +318,12 @@ function spotifyAction(action, a) {
     case 'sp-more': spSearch(true); return true;
     case 'sp-login': spLogin(); return true;
     case 'sp-logout': spSetCfg({ access: '', refresh: '', exp: 0 }); ui.sp = { loading: false, error: '', res: null, sel: new Set() }; render(); return true;
-    case 'sp-copy-redirect': navigator.clipboard?.writeText(spRedirect()); toast('Adresse copiée'); return true;
+    case 'sp-copy-redirect': {
+      const url = spRedirect();
+      // message de succès seulement si la copie a vraiment marché ; sinon on affiche l'adresse à copier à la main
+      (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => toast('Adresse copiée'), () => ask({ title: 'Copie cette adresse', input: true, value: url, ok: 'OK' }));
+      return true;
+    }
   }
   return false;
 }

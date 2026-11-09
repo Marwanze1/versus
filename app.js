@@ -145,8 +145,9 @@ function saveItem() {
   const title = $('#fTitle').value.trim();
   if (!title) return $('#fTitle').focus();
   const data = { title, sub: $('#fSub').value.trim(), img: ui.formImg, link: $('#fLink').value.trim() };
-  if (ui.editId) Object.assign(itemById(ui.editId), data);
-  else col().items.push({ id: uid(), ...data });
+  const edited = ui.editId ? itemById(ui.editId) : null;
+  if (edited) Object.assign(edited, data);          // l'élément modifié existe encore
+  else col().items.push({ id: uid(), ...data });    // sinon (supprimé entre-temps) : on l'ajoute comme nouveau
   ui.editId = null; ui.formImg = '';
   save(); render();
   if (!ui.editId) $('#fTitle')?.focus();
@@ -337,7 +338,13 @@ function startBracket(size) {
 function pick(k, el) {
   if (ui.lock) return; ui.lock = true;
   if (el) { el.classList.add('win'); el.parentElement.querySelectorAll('.duel-card').forEach(x => { if (x !== el) x.classList.add('lose'); }); }
-  setTimeout(() => { col().bracket.picks.push(k); ui.lock = false; save(); render(); }, 380);
+  const b = col().bracket;
+  setTimeout(() => {
+    ui.lock = false;
+    // le tournoi a pu être abandonné ou la collection changée pendant les 380 ms
+    if (b && col().bracket === b) b.picks.push(k);
+    save(); render();
+  }, 380);
 }
 function bracketToTier() {
   const c = col(), b = c.bracket, d = derive(b);
@@ -450,7 +457,7 @@ document.addEventListener('click', async e => {
     case 'tier-export': exportTier(); break;
     case 'b-start': startBracket(ui.size); break;
     case 'b-start-same': startBracket(c.bracket.seed.length); break;
-    case 'b-undo': c.bracket.picks.pop(); save(); render(); break;
+    case 'b-undo': if (c.bracket && !ui.lock) { c.bracket.picks.pop(); save(); render(); } break;
     case 'b-tree': ui.showTree = !ui.showTree; render(); break;
     case 'b-reset': if (!c.bracket || await ask({ title: 'Abandonner ce tournoi ?', text: 'Les choix déjà faits seront perdus.', ok: 'Abandonner', danger: true })) { c.bracket = null; save(); render(); } break;
     case 'b-to-tier': bracketToTier(); break;
@@ -483,7 +490,7 @@ document.addEventListener('keydown', e => {
   const b = col().bracket; if (!b || derive(b).done) return;
   if (e.key === 'ArrowLeft') pick('a', $('[data-pick="a"]'));
   else if (e.key === 'ArrowRight') pick('b', $('[data-pick="b"]'));
-  else if (e.key.toLowerCase() === 'z' && b.picks.length) { b.picks.pop(); save(); render(); }
+  else if (e.key.toLowerCase() === 'z' && b.picks.length && !ui.lock) { b.picks.pop(); save(); render(); }
 });
 
 // drag & drop (tier list)
