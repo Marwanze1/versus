@@ -56,6 +56,7 @@ function renderHeader() {
       ${cover(c.items.find(i => i.img) || { title: c.name }, 'lib-cov')}
       <span><b>${esc(c.name)}</b><small>Collection · ${c.items.length} élément${c.items.length > 1 ? 's' : ''}</small></span>
     </button>`).join('');
+  $('#presetList').innerHTML = presetsHTML();
 }
 function render() {
   document.body.classList.toggle('player-mode', bt.role === 'player' || !!lv.V);
@@ -67,8 +68,10 @@ function render() {
   if (ui.tab === 'items') app.innerHTML = itemsView();
   else if (ui.tab === 'tier') app.innerHTML = tierView();
   else if (ui.tab === 'blind') app.innerHTML = blindView();
+  else if (ui.tab === 'feat') app.innerHTML = featView();
   else app.innerHTML = bracketView();
   if (ui.tab === 'items') bindItemsForm();
+  if (ui.tab === 'feat') featBind();
   btFinaleTick();   // podium animé du blind test (ne fait rien ailleurs)
 }
 
@@ -417,6 +420,9 @@ document.addEventListener('click', async e => {
   const tab = e.target.closest('[data-tab]');
   if (tab) { ui.tab = tab.dataset.tab; ui.selected = null; return render(); }
 
+  const pr = e.target.closest('[data-preset]');
+  if (pr) return presetOpen(pr.dataset.preset);
+
   const cb = e.target.closest('[data-col]');
   if (cb) { store.cur = cb.dataset.col; ui.size = null; ui.editId = null; ui.selected = null; save(); return render(); }
 
@@ -482,7 +488,7 @@ document.addEventListener('click', async e => {
     case 'b-tree': ui.showTree = !ui.showTree; render(); break;
     case 'b-reset': if (!c.bracket || await ask({ title: 'Abandonner ce tournoi ?', text: 'Les choix déjà faits seront perdus.', ok: 'Abandonner', danger: true })) { c.bracket = null; save(); render(); } break;
     case 'b-to-tier': bracketToTier(); break;
-    default: if (!spotifyAction(a.dataset.action, a) && !liveAction(a.dataset.action, a)) blindAction(a.dataset.action, a);
+    default: if (!spotifyAction(a.dataset.action, a) && !liveAction(a.dataset.action, a) && !featAction(a.dataset.action, a)) blindAction(a.dataset.action, a);
   }
 });
 
