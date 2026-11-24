@@ -16,7 +16,7 @@ const lv = {
 };
 const LV_MAX = 500;              // spectateurs connectés en même temps
 const lvLink = code => location.origin + location.pathname.replace(/index\.html$/, '') + '?vote=' + code;
-const lvRoundTitle = (n, r) => n === 1 ? 'Finale' : n === 2 ? 'Demi-finales' : n === 4 ? 'Quarts de finale' : 'Round ' + (r + 1);
+const lvRoundTitle = (n, r, pre) => pre && r === 0 ? 'Tour préliminaire' : n === 1 ? 'Finale' : n === 2 ? 'Demi-finales' : n === 4 ? 'Quarts de finale' : 'Round ' + (pre ? r : r + 1);
 const lvInfo = it => it ? { title: it.title, sub: it.sub || '', img: /^https?:\/\//.test(it.img || '') ? it.img : '' } : null;
 const lvPct = (n, tot) => tot ? Math.round(n * 100 / tot) : 0;
 
@@ -104,7 +104,7 @@ function lvSync() {
   H.key = key; H.phase = phase; H.votes.clear(); H.result = null; H.match = null; H.champ = null; H.endsAt = 0;
   if (phase === 'vote') {
     const n = d.rounds[d.r].length, m = d.rounds[d.r][d.m];
-    H.match = { round: lvRoundTitle(n, d.r), m: d.m + 1, n, a: lvInfo(itemById(m.a)), b: lvInfo(itemById(m.b)) };
+    H.match = { round: lvRoundTitle(n, d.r, d.pre), m: d.m + 1, n, a: lvInfo(itemById(m.a)), b: lvInfo(itemById(m.b)) };
     if (lv.sec) { H.endsAt = Date.now() + lv.sec * 1000; H.tick = setInterval(lvTick, 250); }
   } else if (phase === 'end') H.champ = lvInfo(itemById(d.champion));
   lvBroadcast();

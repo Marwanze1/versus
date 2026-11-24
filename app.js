@@ -59,7 +59,8 @@ function renderHeader() {
   $('#presetList').innerHTML = presetsHTML();
 }
 function render() {
-  document.body.classList.toggle('player-mode', bt.role === 'player' || !!lv.V);
+  document.body.classList.toggle('player-mode', bt.role === 'player' || !!lv.V || fbc.on);
+  if (fbc.on) { $('#app').innerHTML = featClientView(); featBind(); return; }   // joueur d'un salon « battle de feat »
   if (lv.V) { $('#app').innerHTML = lvViewerView(); return; }   // spectateur d'un bracket en direct
   if (bt.role === 'player') { $('#app').innerHTML = playerView(); btFinaleTick(); return; }
   renderHeader();
@@ -182,6 +183,8 @@ function tierView() {
         <div class="tier-label" style="background:${t.color}">
           <div class="name" contenteditable="true" spellcheck="false" data-tname="${t.id}">${esc(t.name)}</div>
           <div class="tools">
+            <button class="mini" data-action="tier-up" data-id="${t.id}" title="Monter ce tier">▲</button>
+            <button class="mini" data-action="tier-down" data-id="${t.id}" title="Descendre ce tier">▼</button>
             <input type="color" value="${t.color}" data-tcolor="${t.id}" title="Couleur">
             <button class="mini" data-action="tier-del" data-id="${t.id}" title="Supprimer ce tier">✕</button>
           </div>
@@ -198,6 +201,17 @@ function tierView() {
     <h3>Non classés (${pool.length})</h3>
     <div class="dropzone" data-zone="">${pool.map(chip).join('')}</div>
   </div>`;
+}
+/* Clic sur une carte de la tier list : joue l'extrait du titre (re-clic = pause) */
+const tierAudio = new Audio();
+async function tierPlay(id) {
+  const it = itemById(id); if (!it || !it.sp) return;
+  if (!spPrev[it.sp]) await spLoadPreviews([it.sp]);
+  const u = spPrev[it.sp];
+  if (!u) return toast('Pas d’extrait audio pour ce titre.');
+  if (tierAudio.src === u && !tierAudio.paused) return tierAudio.pause();
+  try { btAudio.pause(); } catch { }
+  tierAudio.src = u; tierAudio.volume = btAudio.volume; tierAudio.play().catch(() => { });
 }
 function placeItem(id, tier) {
   if (tier) col().place[id] = tier; else delete col().place[id];
@@ -248,23 +262,35 @@ async function exportTier() {
 }
 
 /* ============ Bracket ============ */
+/* Nombre de titres quelconque : s'il n'est pas une puissance de 2, un tour préliminaire (N − L matchs, L = plus grande
+   puissance de 2 ≤ N) départage les premiers ; les autres titres attendent et arrivent au round suivant (« byes »). */
+function bracketShape(N) {   // nombre de matchs de chaque round
+  let L = 1; while (L * 2 <= N) L *= 2;
+  const out = N > L ? [N - L] : [];
+  for (let k = L / 2; k >= 1; k /= 2) out.push(k);
+  return out;
+}
 function derive(b) {
-  const rounds = []; let cur = [];
-  for (let i = 0; i < b.seed.length; i += 2) cur.push({ a: b.seed[i], b: b.seed[i + 1], w: null });
-  rounds.push(cur);
+  const s = b.seed, N = s.length; let L = 1; while (L * 2 <= N) L *= 2;
+  const m0 = N - L, pre = m0 > 0, byes = pre ? s.slice(2 * m0) : [];
+  const mk = list => { const r = []; for (let i = 0; i < list.length; i += 2) r.push({ a: list[i], b: list[i + 1], w: null }); return r; };
+  const rounds = [mk(pre ? s.slice(0, 2 * m0) : s)];
   let r = 0, m = 0, done = false, champion = null;
   for (const p of b.picks) {
     const match = rounds[r][m];
     match.w = p === 'a' ? match.a : match.b;
     m++;
     if (m >= rounds[r].length) {
-      if (rounds[r].length === 1) { done = true; champion = match.w; break; }
-      const next = [];
-      for (let i = 0; i < rounds[r].length; i += 2) next.push({ a: rounds[r][i].w, b: rounds[r][i + 1].w, w: null });
-      rounds.push(next); r++; m = 0;
+      if (rounds[r].length === 1 && !(pre && r === 0)) { done = true; champion = match.w; break; }
+      let list;
+      if (pre && r === 0) {   // vainqueurs du préliminaire et titres qualifiés d'office, entremêlés
+        const w = rounds[0].map(x => x.w), bb = [...byes]; list = [];
+        while (w.length || bb.length) { if (w.length && bb.length) list.push(w.shift(), bb.shift()); else list.push(...w.splice(0), ...bb.splice(0)); }
+      } else list = rounds[r].map(x => x.w);
+      rounds.push(mk(list)); r++; m = 0;
     }
   }
-  return { rounds, r, m, done, champion };
+  return { rounds, r, m, done, champion, pre };
 }
 function bracketView() {
   const c = col(), b = c.bracket;
@@ -274,7 +300,7 @@ function bracketView() {
   if (d.done) return championView(c, d);
   const m = d.rounds[d.r][d.m], A = itemById(m.a), B = itemById(m.b);
   const n = d.rounds[d.r].length;
-  const title = lvRoundTitle(n, d.r);
+  const title = lvRoundTitle(n, d.r, d.pre);
   const side = (it, k) => `
     <div class="duel-card" data-pick="${k}">
       ${cover(it)}
@@ -299,17 +325,18 @@ function bracketView() {
 }
 function setupView() {
   const c = col(), n = c.items.length;
-  const sizes = [4, 8, 16, 32, 64, 128].filter(s => s <= n);
+  const isPow = s => (s & (s - 1)) === 0;
+  const sizes = n < 4 ? [] : [...new Set([...[4, 8, 16, 32, 64, 128, 256].filter(s => s <= n), n])].sort((a, b) => a - b);   // + « tous les titres »
   const viewer = `<div class="lv-joinrow"><span>Spectateur ? Rejoins un vote en direct :</span>
     <input type="text" id="lvJoinCode" placeholder="CODE" maxlength="5" autocomplete="off"><button class="btn ghost sm" data-action="lv-join">Rejoindre</button></div>`;
   if (!sizes.length) return `<div class="empty">Il faut au moins 4 éléments pour lancer un bracket (tu en as ${n}).</div>${viewer}`;
-  if (!sizes.includes(ui.size)) ui.size = sizes[sizes.length - 1];
+  if (!sizes.includes(ui.size)) ui.size = n;   // par défaut : tous les titres
   return `
   ${lvPanel()}
   <div class="setup">
     <h2>Lancer un tournoi</h2>
-    <p class="hint">Choisis le nombre de participants. S’il y a plus d’éléments que de places, ils sont tirés au sort.</p>
-    <div class="size-pick">${sizes.map(s => `<button class="${s === ui.size ? 'on' : ''}" data-size="${s}">${s}<small>${Math.log2(s)} rounds</small></button>`).join('')}</div>
+    <p class="hint">Choisis le nombre de participants (par défaut : tous). S’il y a plus d’éléments que de places, ils sont tirés au sort. Quand ce n’est pas une puissance de 2, un tour préliminaire départage les premiers et les autres titres arrivent au round suivant.</p>
+    <div class="size-pick">${sizes.map(s => `<button class="${s === ui.size ? 'on' : ''}" data-size="${s}">${s}<small>${s === n && !isPow(s) ? 'tous · ' : ''}${bracketShape(s).length} rounds${isPow(s) ? '' : ' (préliminaire)'}</small></button>`).join('')}</div>
     <label class="check"><input type="checkbox" id="mix" ${ui.mix ? 'checked' : ''}> Mélanger le tirage</label><br>
     <div class="row"><button class="btn" data-action="b-start">⚔️ Lancer le bracket (${ui.size})</button>
       <button class="btn ghost" data-action="lv-start">📡 Lancer en direct (votes des spectateurs)</button></div>
@@ -335,8 +362,8 @@ function championView(c, d) {
   <div class="tree-title">Arbre du tournoi</div>${treeHTML(c.bracket, d)}`;
 }
 function treeHTML(b, d) {
-  const rounds = Math.log2(b.seed.length);
-  const label = (k) => { const n = b.seed.length / 2 ** (k + 1); return n === 1 ? 'Finale' : n === 2 ? 'Demi-finales' : n === 4 ? 'Quarts' : `Round ${k + 1}`; };
+  const shape = bracketShape(b.seed.length), rounds = shape.length;
+  const label = (k) => { const n = shape[k]; return d.pre && k === 0 ? 'Préliminaire' : n === 1 ? 'Finale' : n === 2 ? 'Demi-finales' : n === 4 ? 'Quarts' : `Round ${d.pre ? k : k + 1}`; };
   const cell = (id, m, other) => {
     if (!id) return '<div class="tbd">à déterminer</div>';
     const cls = m.w ? (m.w === id ? 'w' : 'l') : '';
@@ -344,7 +371,7 @@ function treeHTML(b, d) {
   };
   let html = '<div class="tree">';
   for (let k = 0; k < rounds; k++) {
-    const n = b.seed.length / 2 ** (k + 1);
+    const n = shape[k];
     const ms = d.rounds[k] || Array.from({ length: n }, () => ({ a: null, b: null, w: null }));
     html += `<div class="tree-col"><h4>${label(k)}</h4>${ms.map((m, i) =>
       `<div class="tmatch ${!d.done && k === d.r && i === d.m ? 'cur' : ''}">${cell(m.a, m)}${cell(m.b, m)}</div>`).join('')}</div>`;
@@ -433,7 +460,7 @@ document.addEventListener('click', async e => {
   if (pk && !e.target.closest('a')) return pick(pk.dataset.pick, pk);
 
   const chip = e.target.closest('[data-chip]');
-  if (chip) { ui.selected = ui.selected === chip.dataset.chip ? null : chip.dataset.chip; return render(); }
+  if (chip) { tierPlay(chip.dataset.chip); ui.selected = ui.selected === chip.dataset.chip ? null : chip.dataset.chip; return render(); }
 
   const zone = e.target.closest('[data-zone]');
   if (zone && ui.selected && !e.target.closest('[data-tname],input')) return placeItem(ui.selected, zone.dataset.zone);
@@ -477,6 +504,11 @@ document.addEventListener('click', async e => {
       if (lines.length) { c.bracket = null; save(); render(); } break;
     }
     case 'tier-add': c.tiers.push({ id: uid(), name: 'Nouveau', color: '#b07cff' }); save(); render(); break;
+    case 'tier-up': case 'tier-down': {
+      const i = c.tiers.findIndex(t => t.id === id), j = i + (a.dataset.action === 'tier-up' ? -1 : 1);
+      if (i < 0 || j < 0 || j >= c.tiers.length) return;
+      [c.tiers[i], c.tiers[j]] = [c.tiers[j], c.tiers[i]]; save(); render(); break;
+    }
     case 'tier-del':
       if (c.tiers.length < 2) return;
       c.tiers = c.tiers.filter(t => t.id !== id); save(); render(); break;
